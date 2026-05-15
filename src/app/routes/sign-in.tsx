@@ -42,7 +42,7 @@ function SignInPage() {
   }
 
   const handleVerify = () => {
-    if (otp.length < 6) return
+    if (otp.length < 8) return
     setError('')
     verifyOtp.mutate({ phoneE164, code: otp, challengeId })
   }
@@ -81,16 +81,16 @@ function SignInPage() {
                 Entrez le code à 6 chiffres envoyé au {phone}.
               </p>
               <div className="mt-8 flex flex-col items-center space-y-4">
-                <InputOTP maxLength={6} value={otp} onChange={(v) => setOtp(v)}>
+                <InputOTP maxLength={8} value={otp} onChange={(v) => setOtp(v)}>
                   <InputOTPGroup>
-                    {[0, 1, 2, 3, 4, 5].map((i) => (
+                    {[0, 1, 2, 3, 4, 5, 6, 7].map((i) => (
                       <InputOTPSlot key={i} index={i} />
                     ))}
                   </InputOTPGroup>
                 </InputOTP>
                 <button
                   onClick={handleVerify}
-                  disabled={otp.length < 6 || verifyOtp.isPending}
+                  disabled={otp.length < 8 || verifyOtp.isPending}
                   className="vibe-cta w-full disabled:cursor-not-allowed disabled:opacity-60"
                 >
                   {verifyOtp.isPending ? 'Vérification…' : 'Vérifier'}
