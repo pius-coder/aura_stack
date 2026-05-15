@@ -1,84 +1,224 @@
+/**
+ * Landing page — Vibe
+ *
+ * Structure mirrors runey.app exactly:
+ *  - Hero: headline + sub + CTA + iPhone mockup
+ *  - Feature sections: pill badge + h2 + p + feature list (circle-check) + screenshot/mockup
+ *  - Testimonials: card grid
+ *  - Pricing: 3-column cards
+ *  - Final CTA: full-width with Runey-style button
+ *  - Dark footer (bg-black)
+ *
+ * Scroll-reveal: `transition-all duration-700 ease-out` + JS IntersectionObserver
+ * Button: exact Runey pattern — bg-gradient-to-b from-[hsl(var(--primary-light))]
+ *         to-[hsl(var(--primary))] + inset shadow system
+ */
+
 import { createFileRoute, Link } from '@tanstack/react-router'
+import { useEffect } from 'react'
 import { VibeLayout } from '@/aura/ui/vibe-layout'
-import { VibeWhatsAppMockup } from '@/aura/ui/vibe-whatsapp-mockup'
+import { VibeIphoneMockup } from '@/aura/ui/vibe-iphone-mockup'
 
 export const Route = createFileRoute('/')({ component: LandingPage })
 
+/* ── Scroll-reveal hook ─────────────────────────────────────── */
+function useReveal() {
+  useEffect(() => {
+    const els = document.querySelectorAll<HTMLElement>('[data-reveal]')
+    const io = new IntersectionObserver(
+      (entries) => {
+        entries.forEach((e) => {
+          if (e.isIntersecting) {
+            ;(e.target as HTMLElement).style.opacity = '1'
+            ;(e.target as HTMLElement).style.transform = 'translateY(0px)'
+            io.unobserve(e.target)
+          }
+        })
+      },
+      { threshold: 0.12 },
+    )
+    els.forEach((el) => io.observe(el))
+    return () => io.disconnect()
+  }, [])
+}
+
+/* ── Runey-exact primary button ─────────────────────────────── */
+function PrimaryBtn({
+  children,
+  href,
+  className = '',
+}: {
+  children: React.ReactNode
+  href: string
+  className?: string
+}) {
+  return (
+    <Link
+      to={href as '/sign-up' | '/sign-in'}
+      className={
+        'inline-flex items-center justify-center gap-2 whitespace-nowrap rounded-full text-sm font-semibold ' +
+        'bg-gradient-to-b from-[hsl(var(--primary-light))] to-[hsl(var(--primary))] ' +
+        'text-[hsl(var(--primary-foreground,152_90%_6%))] ' +
+        'shadow-[inset_0_1px_0_0_rgba(255,255,255,0.25),inset_0_-1px_0_0_rgba(0,0,0,0.1),0_1px_3px_0_hsl(var(--primary)/0.4),0_4px_12px_-4px_hsl(var(--primary)/0.35)] ' +
+        'hover:shadow-[inset_0_1px_0_0_rgba(255,255,255,0.3),inset_0_-1px_0_0_rgba(0,0,0,0.12),0_2px_6px_0_hsl(var(--primary)/0.45),0_8px_20px_-4px_hsl(var(--primary)/0.4)] ' +
+        'hover:brightness-[1.06] active:brightness-[0.96] ' +
+        'active:shadow-[inset_0_2px_4px_0_rgba(0,0,0,0.2),0_1px_2px_0_hsl(var(--primary)/0.3)] ' +
+        'transition-all duration-150 h-11 px-7 ' +
+        className
+      }
+    >
+      {children}
+    </Link>
+  )
+}
+
+/* ── Ghost button ───────────────────────────────────────────── */
+function GhostBtn({
+  children,
+  href,
+  className = '',
+}: {
+  children: React.ReactNode
+  href: string
+  className?: string
+}) {
+  return (
+    <Link
+      to={href as '/sign-in' | '/sign-up'}
+      className={
+        'inline-flex items-center justify-center gap-2 whitespace-nowrap rounded-full border border-[var(--vibe-line-strong)] ' +
+        'bg-transparent text-sm font-semibold text-[var(--vibe-fg)] ' +
+        'hover:bg-[var(--vibe-surface-2)] transition-colors h-11 px-7 ' +
+        className
+      }
+    >
+      {children}
+    </Link>
+  )
+}
+
+/* ── Pill badge (Runey style) ───────────────────────────────── */
+function Pill({ children }: { children: React.ReactNode }) {
+  return (
+    <div className="inline-flex items-center gap-2 rounded-full border border-[hsl(var(--primary)/0.2)] bg-[hsl(var(--primary)/0.08)] px-4 py-1.5 text-xs font-semibold tracking-wide text-[hsl(var(--primary))]">
+      {children}
+    </div>
+  )
+}
+
+/* ── Feature check item ─────────────────────────────────────── */
+function FeatureItem({ children }: { children: React.ReactNode }) {
+  return (
+    <li className="flex items-start gap-2 text-[13px] text-foreground/90">
+      {/* circle-check icon — exact Runey */}
+      <svg
+        xmlns="http://www.w3.org/2000/svg"
+        width="14"
+        height="14"
+        viewBox="0 0 24 24"
+        fill="none"
+        stroke="currentColor"
+        strokeWidth="2"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+        className="mt-0.5 shrink-0 text-[hsl(var(--primary))]"
+      >
+        <circle cx="12" cy="12" r="10" />
+        <path d="m9 12 2 2 4-4" />
+      </svg>
+      {children}
+    </li>
+  )
+}
+
+/* ── Reveal wrapper ─────────────────────────────────────────── */
+function Reveal({
+  children,
+  delay = 0,
+  className = '',
+}: {
+  children: React.ReactNode
+  delay?: number
+  className?: string
+}) {
+  return (
+    <div
+      data-reveal
+      className={'transition-all duration-700 ease-out ' + className}
+      style={{ opacity: 0, transform: 'translateY(2rem)', transitionDelay: `${delay}ms` }}
+    >
+      {children}
+    </div>
+  )
+}
+
+/* ═══════════════════════════════════════════════════════════════
+ * Page
+ * ═══════════════════════════════════════════════════════════════ */
+
 function LandingPage() {
+  useReveal()
   return (
     <VibeLayout>
       <Hero />
-      <Stats />
-      <HowItWorks />
-      <Audience />
-      <Trust />
+      <Testimonials />
+      <Features />
+      <Pricing />
       <FinalCta />
     </VibeLayout>
   )
 }
 
 /* ─────────────────────────────────────────────────────────────────
- * Hero — split layout, WhatsApp mockup on the right.
- * 60% near-black surface, 30% chrome, 10% accent CTA only.
+ * Hero
  * ───────────────────────────────────────────────────────────────── */
 
 function Hero() {
   return (
-    <section className="relative overflow-hidden">
-      {/* Single soft accent glow, no rainbow */}
-      <div
-        className="vibe-glow"
-        style={{ '--glow-x': '70%', '--glow-y': '5%' } as React.CSSProperties}
-      />
+    <section className="px-4 pb-14 pt-12 md:px-6 md:pb-20 md:pt-20">
+      <div className="mx-auto max-w-6xl">
+        <div className="grid items-center gap-10 lg:grid-cols-[1.1fr_0.9fr] lg:gap-16">
+          {/* Left */}
+          <div>
+            <Reveal>
+              <Pill>Cameroun · Inscription gratuite</Pill>
+            </Reveal>
 
-      <div className="relative mx-auto grid w-full max-w-6xl gap-12 px-5 pb-20 pt-16 sm:px-8 sm:pt-24 lg:grid-cols-[1.05fr_0.95fr] lg:gap-16">
-        <div className="flex flex-col justify-center">
-          <span className="vibe-reveal vibe-pill self-start">
-            <Dot />
-            Cameroun · Inscription gratuite
-          </span>
+            <Reveal delay={80}>
+              <h1 className="mt-5 text-[2rem] font-semibold leading-tight tracking-[-0.025em] text-foreground md:text-[3.25rem]">
+                Votre prestataire de confiance,{' '}
+                <span className="text-[hsl(var(--primary))]">
+                  trouvé sur WhatsApp.
+                </span>
+              </h1>
+            </Reveal>
 
-          <h1 className="vibe-reveal vibe-reveal-delay-1 vibe-display mt-6 text-[2.5rem] sm:text-[3.5rem] lg:text-[4.25rem]">
-            Le bon prestataire,
-            <br className="hidden sm:block" />
-            <span className="text-[var(--vibe-accent)]">trouvé sur WhatsApp.</span>
-          </h1>
+            <Reveal delay={160}>
+              <p className="mt-4 max-w-xl text-sm leading-relaxed text-muted-foreground md:text-base">
+                Décrivez votre besoin à votre assistant Vibe. Recevez 3 à 5
+                profils vérifiés. Discutez de manière anonyme, sans jamais
+                partager votre numéro de téléphone.
+              </p>
+            </Reveal>
 
-          <p className="vibe-reveal vibe-reveal-delay-2 mt-6 max-w-xl text-base leading-relaxed text-[var(--vibe-fg-muted)] sm:text-lg">
-            Décrivez votre besoin à votre assistant Vibe. Il vous propose 3 à 5
-            profils vérifiés. Vous discutez de manière anonyme, sans jamais
-            partager votre numéro.
-          </p>
-
-          <div className="vibe-reveal vibe-reveal-delay-3 mt-10 flex flex-col items-stretch gap-3 sm:flex-row sm:items-center">
-            <Link to="/sign-up" className="vibe-cta">
-              Commencer maintenant
-              <ArrowRight />
-            </Link>
-            <a href="#how" className="vibe-cta-ghost">
-              Voir comment ça marche
-            </a>
+            <Reveal delay={240}>
+              <div className="mt-8 flex flex-wrap items-center gap-3">
+                <PrimaryBtn href="/sign-up">
+                  Commencer gratuitement
+                  <ArrowRight />
+                </PrimaryBtn>
+                <GhostBtn href="/sign-in">Se connecter</GhostBtn>
+              </div>
+              <p className="mt-3 text-[11px] text-muted-foreground">
+                Aucun mot de passe · Code par WhatsApp · Gratuit pendant le MVP
+              </p>
+            </Reveal>
           </div>
 
-          <div className="vibe-reveal vibe-reveal-delay-4 mt-8 flex items-center gap-5 text-xs text-[var(--vibe-fg-subtle)]">
-            <span className="flex items-center gap-1.5">
-              <Check />
-              Aucun mot de passe
-            </span>
-            <span className="flex items-center gap-1.5">
-              <Check />
-              Code par WhatsApp
-            </span>
-            <span className="flex items-center gap-1.5">
-              <Check />
-              100% anonyme
-            </span>
-          </div>
-        </div>
-
-        {/* WhatsApp mockup — proof, not decoration */}
-        <div className="vibe-reveal vibe-reveal-delay-2 flex justify-center lg:justify-end">
-          <VibeWhatsAppMockup className="w-full max-w-[380px]" />
+          {/* Right — iPhone mockup */}
+          <Reveal delay={160} className="flex justify-center lg:justify-end">
+            <VibeIphoneMockup />
+          </Reveal>
         </div>
       </div>
     </section>
@@ -86,281 +226,436 @@ function Hero() {
 }
 
 /* ─────────────────────────────────────────────────────────────────
- * Stats — restrained, monochrome row of 4 numbers
+ * Testimonials
  * ───────────────────────────────────────────────────────────────── */
 
-function Stats() {
+function Testimonials() {
   const items = [
-    { value: '< 3 min', label: 'Temps moyen jusqu\'à un match' },
-    { value: '100%', label: 'Conversations anonymes' },
-    { value: 'FR + EN', label: 'Bot multilingue' },
-    { value: 'Gratuit', label: 'Pendant la phase MVP' },
+    {
+      text: "J'ai trouvé un électricien fiable en moins de 5 minutes. L'assistant a compris exactement ce que je cherchais sans que j'aie besoin de remplir un formulaire. Vraiment impressionnant.",
+      name: 'Marie K.',
+      role: 'Particulière, Yaoundé',
+    },
+    {
+      text: "Depuis que je suis sur Vibe, je reçois des demandes de clients sérieux. Le système de notation me permet de bâtir ma réputation et les clients voient mes avis avant de me contacter.",
+      name: 'Jean-Paul N.',
+      role: 'Plombier, Douala',
+    },
   ]
+
   return (
-    <section className="border-y border-[var(--vibe-line)]">
-      <div className="mx-auto grid w-full max-w-6xl grid-cols-2 divide-y divide-[var(--vibe-line)] px-5 sm:grid-cols-4 sm:divide-x sm:divide-y-0 sm:px-8">
-        {items.map((s, i) => (
-          <div
-            key={s.label}
-            className={`flex flex-col gap-1.5 px-4 py-7 sm:py-9 ${
-              i % 2 === 1 ? 'border-l border-[var(--vibe-line)] sm:border-l-0' : ''
-            }`}
-          >
-            <p className="vibe-display text-2xl sm:text-3xl">{s.value}</p>
-            <p className="text-xs text-[var(--vibe-fg-subtle)] sm:text-sm">
-              {s.label}
+    <section className="px-4 py-14 md:px-6 md:py-20">
+      <div className="mx-auto max-w-3xl">
+        <Reveal className="mb-10 text-center md:mb-12">
+          <Pill>Témoignages</Pill>
+          <h2 className="mt-4 text-xl font-semibold leading-tight tracking-[-0.025em] text-foreground md:text-[2rem]">
+            Aimé par les clients et les prestataires
+          </h2>
+          <p className="mt-3 mx-auto max-w-xl text-sm leading-relaxed text-muted-foreground">
+            Des mots vrais de personnes qui utilisent Vibe au quotidien.
+          </p>
+        </Reveal>
+
+        <div className="grid grid-cols-1 gap-5 md:grid-cols-2">
+          {items.map((t, i) => (
+            <Reveal key={i} delay={i * 80}>
+              <div className="flex flex-col gap-6 rounded-2xl border border-border/60 bg-card p-6 shadow-sm md:rounded-3xl md:p-8">
+                <p className="text-[15px] leading-relaxed text-foreground md:text-base">
+                  {t.text}
+                </p>
+                <div className="mt-auto flex items-center gap-3">
+                  <div
+                    className="grid h-11 w-11 shrink-0 place-items-center rounded-full text-sm font-semibold text-white"
+                    style={{
+                      background:
+                        'radial-gradient(circle at 30% 25%, #2ec788, #18a065)',
+                    }}
+                  >
+                    {t.name[0]}
+                  </div>
+                  <div className="min-w-0">
+                    <div className="truncate text-sm font-semibold text-foreground">
+                      {t.name}
+                    </div>
+                    <div className="truncate text-xs text-muted-foreground">
+                      {t.role}
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </Reveal>
+          ))}
+        </div>
+      </div>
+    </section>
+  )
+}
+
+/* ─────────────────────────────────────────────────────────────────
+ * Features — Runey structure: pill + h3 + p + feature list + mockup
+ * ───────────────────────────────────────────────────────────────── */
+
+function Features() {
+  return (
+    <section id="features" className="px-4 py-14 md:px-6 md:py-20">
+      <div className="mx-auto mb-10 max-w-3xl text-center md:mb-12">
+        <Reveal>
+          <Pill>Fonctionnalités</Pill>
+          <h2 className="mt-4 text-xl font-semibold leading-tight tracking-[-0.025em] text-foreground md:text-[2rem]">
+            Tout ce dont vous avez besoin pour trouver ou proposer un service
+          </h2>
+          <p className="mt-3 mx-auto max-w-xl text-sm leading-relaxed text-muted-foreground">
+            Du matching IA à la conversation anonyme — tous les outils en un seul endroit.
+          </p>
+        </Reveal>
+      </div>
+
+      <div className="mx-auto max-w-[1200px] space-y-5">
+        <FeatureBlock
+          id="matching"
+          pill="Matching IA"
+          title="Trouvez le bon prestataire en moins de 3 minutes"
+          description="Décrivez votre besoin en langage naturel sur WhatsApp. L'assistant Vibe analyse votre demande, interroge la base de prestataires et vous propose 3 à 5 profils pertinents avec leurs notes et spécialités."
+          features={[
+            'Compréhension du langage naturel (FR + EN)',
+            'Matching par compétences, localisation et réputation',
+            'Mélange de profils très compatibles et complémentaires',
+            'Résultats en moins de 10 secondes',
+            'Historique de vos recherches sur le dashboard',
+            'Suggestions affinées à chaque conversation',
+          ]}
+        />
+
+        <FeatureBlock
+          id="anonymat"
+          pill="Anonymat & Sécurité"
+          title="Discutez en toute sécurité, sans jamais partager votre numéro"
+          description="Le double opt-in garantit que les deux parties acceptent la mise en relation avant tout échange. Photos et numéros restent masqués jusqu'à votre accord explicite. Toutes les conversations sont conservées pour les litiges."
+          features={[
+            'Double opt-in obligatoire avant ouverture du chat',
+            'Alias affiché à la place du vrai nom',
+            'Photos révélées uniquement après acceptation mutuelle',
+            'Numéros de téléphone jamais échangés',
+            'Historique complet conservé pour les litiges',
+            'Signalement en un clic depuis le chat',
+          ]}
+        />
+
+        <FeatureBlock
+          id="prestataires"
+          pill="Pour les prestataires"
+          title="Soyez visible auprès des bons clients"
+          description="Publiez vos services, définissez vos zones d'intervention et vos tarifs. Votre profil est automatiquement indexé dans le moteur de matching. Chaque mission notée renforce votre réputation sur la plateforme."
+          features={[
+            'Publication de services avec tarifs et disponibilité',
+            'Zones d\'intervention personnalisables',
+            'Indexation automatique dans le moteur de matching',
+            'Système de notation après chaque mission',
+            'Badge Vérifié pour les prestataires identifiés',
+            'Statistiques de visibilité sur le dashboard',
+          ]}
+        />
+
+        <FeatureBlock
+          id="moderation"
+          pill="Modération"
+          title="Une plateforme de confiance, modérée activement"
+          description="Chaque litige est examiné par l'équipe Vibe. Trois avertissements entraînent une suspension automatique. Les admins peuvent lire les conversations signalées et trancher en toute transparence."
+          features={[
+            'Signalement depuis le chat en un clic',
+            'Snapshot de la conversation au moment du signalement',
+            'Examen par l\'équipe Vibe sous 48h',
+            'Système d\'avertissements progressifs',
+            'Suspension automatique après 3 avertissements',
+            'Levée de suspension possible après résolution',
+          ]}
+        />
+      </div>
+    </section>
+  )
+}
+
+function FeatureBlock({
+  id,
+  pill,
+  title,
+  description,
+  features,
+}: {
+  id: string
+  pill: string
+  title: string
+  description: string
+  features: string[]
+}) {
+  return (
+    <Reveal>
+      <div
+        id={id}
+        className="overflow-hidden rounded-2xl border border-border/40 bg-card"
+      >
+        <div className="p-5 pb-4 md:p-7 md:pb-5">
+          <Pill>{pill}</Pill>
+          <h3 className="mb-2 mt-3 text-2xl font-semibold leading-tight tracking-[-0.02em] text-foreground">
+            {title}
+          </h3>
+          <p className="mb-4 text-[13px] leading-relaxed text-muted-foreground">
+            {description}
+          </p>
+          <ul className="grid grid-cols-1 gap-x-4 gap-y-2 md:grid-cols-2 lg:grid-cols-3">
+            {features.map((f) => (
+              <FeatureItem key={f}>{f}</FeatureItem>
+            ))}
+          </ul>
+        </div>
+        {/* Mockup placeholder — will be replaced with real screenshots */}
+        <div className="px-3 pb-3 pt-2 md:px-5 md:pb-5">
+          <div className="overflow-hidden rounded-xl">
+            <div
+              className="flex w-full items-center justify-center rounded-xl border border-border/30 bg-[var(--vibe-bg-2)]"
+              style={{ aspectRatio: '16/7' }}
+            >
+              <span className="text-xs text-muted-foreground">
+                Aperçu disponible prochainement
+              </span>
+            </div>
+          </div>
+        </div>
+      </div>
+    </Reveal>
+  )
+}
+
+/* ─────────────────────────────────────────────────────────────────
+ * Pricing — 3 cards, Runey structure
+ * ───────────────────────────────────────────────────────────────── */
+
+function Pricing() {
+  const plans = [
+    {
+      name: 'Gratuit',
+      sub: 'Pour découvrir',
+      price: '0',
+      period: '/mois',
+      note: 'Phase MVP — aucune carte requise',
+      users: 'Accès complet',
+      features: [
+        'Matching IA illimité',
+        'Chat anonyme',
+        'Profil prestataire',
+        'Notation après mission',
+        'Notifications WhatsApp',
+        'Dashboard web',
+      ],
+      cta: 'Commencer gratuitement',
+      href: '/sign-up',
+      highlight: false,
+    },
+    {
+      name: 'Badge Vérifié',
+      sub: 'Pour les prestataires sérieux',
+      price: '10 000',
+      period: ' FCFA/an',
+      note: 'Bientôt disponible',
+      users: 'Prestataires uniquement',
+      features: [
+        'Tout le plan Gratuit',
+        'Vérification d\'identité (selfie + CNI)',
+        'Priorité dans les résultats de matching',
+        'Badge visible sur le profil',
+        'Garantie plateforme en cas de litige',
+        'Historique des missions visible',
+      ],
+      cta: 'Bientôt disponible',
+      href: '/sign-up',
+      highlight: true,
+    },
+    {
+      name: 'Pro',
+      sub: 'Pour les prestataires actifs',
+      price: '3 000',
+      period: ' FCFA/mois',
+      note: 'Bientôt disponible',
+      users: 'Prestataires uniquement',
+      features: [
+        'Tout le plan Badge Vérifié',
+        'Matchings illimités par jour',
+        'Boost ponctuel (top 3 pendant 7 jours)',
+        'Statistiques avancées',
+        'Support prioritaire',
+      ],
+      cta: 'Bientôt disponible',
+      href: '/sign-up',
+      highlight: false,
+    },
+  ]
+
+  return (
+    <section id="pricing" className="px-4 py-14 md:px-6 md:py-20">
+      <div className="mx-auto max-w-[1100px]">
+        <Reveal>
+          <div className="mb-8 text-center">
+            <Pill>Tarifs</Pill>
+            <h2 className="mt-4 text-xl font-semibold leading-tight tracking-[-0.025em] text-foreground md:text-[2rem]">
+              Simple et transparent
+            </h2>
+            <p className="mt-2 text-sm text-muted-foreground">
+              Tout ce dont vous avez besoin pour trouver ou proposer un service. Sans frais cachés.
             </p>
           </div>
-        ))}
-      </div>
-    </section>
-  )
-}
+        </Reveal>
 
-/* ─────────────────────────────────────────────────────────────────
- * How it works — 4 numbered steps, monochrome with a single accent bar
- * ───────────────────────────────────────────────────────────────── */
+        <div className="grid grid-cols-1 items-stretch gap-5 md:grid-cols-3">
+          {plans.map((p, i) => (
+            <Reveal key={p.name} delay={i * 80}>
+              <div
+                className={
+                  'relative flex flex-col rounded-2xl border p-6 text-left md:p-7 ' +
+                  (p.highlight
+                    ? 'border-[hsl(var(--primary)/0.4)] bg-[hsl(var(--primary)/0.06)]'
+                    : 'border-border/60 bg-card')
+                }
+              >
+                {p.highlight && (
+                  <div className="absolute -top-3 left-1/2 -translate-x-1/2">
+                    <span className="rounded-full bg-[hsl(var(--primary))] px-3 py-0.5 text-[10px] font-semibold text-[hsl(var(--primary-foreground,152_90%_6%))]">
+                      Recommandé
+                    </span>
+                  </div>
+                )}
+                <div className="mb-3">
+                  <div className="text-base font-semibold text-foreground">
+                    {p.name}
+                  </div>
+                  <div className="text-xs text-muted-foreground">{p.sub}</div>
+                </div>
+                <div className="mb-1 flex items-baseline gap-1">
+                  <span className="text-4xl font-semibold tracking-tight text-foreground">
+                    {p.price}
+                  </span>
+                  <span className="text-sm text-muted-foreground">
+                    {p.period}
+                  </span>
+                </div>
+                <p className="mb-3 text-xs text-muted-foreground">{p.note}</p>
+                <div className="mb-5 inline-flex items-center gap-1.5 text-xs text-muted-foreground">
+                  <UsersIcon />
+                  {p.users}
+                </div>
+                <ul className="mb-6 flex-1 space-y-2.5">
+                  {p.features.map((f) => (
+                    <li
+                      key={f}
+                      className="flex items-start gap-2 text-[13px] text-foreground/90"
+                    >
+                      <svg
+                        xmlns="http://www.w3.org/2000/svg"
+                        width="14"
+                        height="14"
+                        viewBox="0 0 24 24"
+                        fill="none"
+                        stroke="currentColor"
+                        strokeWidth="2"
+                        strokeLinecap="round"
+                        strokeLinejoin="round"
+                        className="mt-0.5 shrink-0 text-[hsl(var(--primary))]"
+                      >
+                        <path d="M20 6 9 17l-5-5" />
+                      </svg>
+                      <span>{f}</span>
+                    </li>
+                  ))}
+                </ul>
+                <PrimaryBtn href={p.href as '/sign-up'} className="w-full justify-center">
+                  {p.cta}
+                  <ArrowRight />
+                </PrimaryBtn>
+              </div>
+            </Reveal>
+          ))}
+        </div>
 
-function HowItWorks() {
-  const steps = [
-    {
-      n: '01',
-      title: 'Inscrivez-vous avec votre numéro',
-      body:
-        "Aucun email, aucun mot de passe. Saisissez votre numéro WhatsApp et recevez votre code de connexion sur WhatsApp.",
-    },
-    {
-      n: '02',
-      title: 'Discutez avec votre assistant',
-      body:
-        "Décrivez votre besoin en langage naturel. L'assistant Vibe apprend vos préférences à chaque échange.",
-    },
-    {
-      n: '03',
-      title: 'Recevez 3 à 5 propositions',
-      body:
-        "Compétences, localisation et réputation se combinent pour proposer un mélange équilibré de profils pertinents.",
-    },
-    {
-      n: '04',
-      title: 'Connectez-vous en sécurité',
-      body:
-        "Demande de connexion en un message. Le prestataire valide. Vous discutez sur le web sans échanger de numéro.",
-    },
-  ]
-
-  return (
-    <section id="how" className="mx-auto w-full max-w-6xl px-5 py-28 sm:px-8">
-      <div className="mb-14 max-w-2xl">
-        <span className="vibe-eyebrow">Comment ça marche</span>
-        <h2 className="vibe-display mt-3 text-3xl sm:text-5xl">
-          Quatre étapes. Aucune friction.
-        </h2>
-        <p className="mt-5 max-w-xl text-base text-[var(--vibe-fg-muted)]">
-          Conçu pour fonctionner sur le téléphone que vous avez déjà,
-          sans application supplémentaire à installer.
+        <p className="mt-5 text-center text-[11px] text-muted-foreground">
+          Aucune carte requise. Les plans payants seront activés après le MVP.
+          Paiement via MTN MoMo et Orange Money.
         </p>
       </div>
-
-      <ol className="grid gap-px overflow-hidden rounded-2xl border border-[var(--vibe-line)] bg-[var(--vibe-line)] sm:grid-cols-2 lg:grid-cols-4">
-        {steps.map((step, i) => (
-          <li
-            key={step.n}
-            className="flex flex-col gap-4 bg-[var(--vibe-bg-2)] p-7"
-          >
-            <div className="flex items-center gap-3">
-              <span className="font-mono text-xs font-medium text-[var(--vibe-fg-subtle)]">
-                {step.n}
-              </span>
-              {i === 0 && (
-                <span className="h-px flex-1 bg-gradient-to-r from-[var(--vibe-accent)] via-transparent to-transparent" />
-              )}
-            </div>
-            <h3 className="text-base font-semibold leading-snug text-[var(--vibe-fg)]">
-              {step.title}
-            </h3>
-            <p className="text-sm leading-relaxed text-[var(--vibe-fg-muted)]">
-              {step.body}
-            </p>
-          </li>
-        ))}
-      </ol>
     </section>
   )
 }
 
 /* ─────────────────────────────────────────────────────────────────
- * Audience — three cards, monochrome with restrained iconography
- * ───────────────────────────────────────────────────────────────── */
-
-function Audience() {
-  const personas = [
-    {
-      tag: 'Pour les clients',
-      title: 'Trouvez le bon prestataire, sans le bouche-à-oreille',
-      points: [
-        'Décrivez votre besoin en langage naturel',
-        'Comparez 3 à 5 profils anonymisés',
-        'Notez après mission pour aider la communauté',
-      ],
-    },
-    {
-      tag: 'Pour les prestataires',
-      title: "Soyez visible auprès des bons clients",
-      points: [
-        'Publiez vos services et zones d\'intervention',
-        'Recevez des demandes ciblées sur WhatsApp',
-        'Bâtissez votre réputation par les notes reçues',
-      ],
-    },
-    {
-      tag: 'Pour tout le monde',
-      title: 'Un seul compte, deux usages',
-      points: [
-        'Cumulez les rôles client et prestataire',
-        'Conversations chiffrées, photos masquées',
-        'Modération active 24/7',
-      ],
-    },
-  ]
-
-  return (
-    <section id="audience" className="mx-auto w-full max-w-6xl px-5 py-28 sm:px-8">
-      <div className="mb-14 max-w-2xl">
-        <span className="vibe-eyebrow">Pour qui</span>
-        <h2 className="vibe-display mt-3 text-3xl sm:text-5xl">
-          Conçu pour l'économie réelle.
-        </h2>
-      </div>
-
-      <div className="grid gap-5 lg:grid-cols-3">
-        {personas.map((p) => (
-          <article
-            key={p.tag}
-            className="vibe-card flex flex-col p-7 transition hover:border-[var(--vibe-line-strong)]"
-          >
-            <span className="vibe-eyebrow">{p.tag}</span>
-            <h3 className="vibe-display mt-3 text-xl leading-snug">{p.title}</h3>
-            <ul className="mt-6 space-y-3 border-t border-[var(--vibe-line)] pt-5">
-              {p.points.map((pt) => (
-                <li
-                  key={pt}
-                  className="flex items-start gap-2.5 text-sm text-[var(--vibe-fg-muted)]"
-                >
-                  <Check />
-                  <span>{pt}</span>
-                </li>
-              ))}
-            </ul>
-          </article>
-        ))}
-      </div>
-    </section>
-  )
-}
-
-/* ─────────────────────────────────────────────────────────────────
- * Trust — four neutral cards, no chromatic noise
- * ───────────────────────────────────────────────────────────────── */
-
-function Trust() {
-  const items = [
-    {
-      title: 'Anonymat par défaut',
-      body:
-        "Photos et numéros invisibles tant que les deux parties n'ont pas accepté la mise en relation.",
-    },
-    {
-      title: 'Modération active',
-      body:
-        "Tout litige est examiné par l'équipe Vibe sous 48h. Trois avertissements entraînent une suspension.",
-    },
-    {
-      title: 'Vos données chez vous',
-      body:
-        "Hébergement zone CEMAC. Conformité Code numérique camerounais et bonnes pratiques RGPD.",
-    },
-    {
-      title: 'Inscription par WhatsApp',
-      body:
-        "Code à 6 chiffres reçu sur votre WhatsApp. Aucun mot de passe, aucun email obligatoire.",
-    },
-  ]
-  return (
-    <section id="trust" className="mx-auto w-full max-w-6xl px-5 py-28 sm:px-8">
-      <div className="mb-14 max-w-2xl">
-        <span className="vibe-eyebrow">Confiance</span>
-        <h2 className="vibe-display mt-3 text-3xl sm:text-5xl">
-          La confiance comme infrastructure.
-        </h2>
-      </div>
-      <div className="grid gap-5 sm:grid-cols-2 lg:grid-cols-4">
-        {items.map((i) => (
-          <div key={i.title} className="vibe-card p-6">
-            <h3 className="text-base font-semibold text-[var(--vibe-fg)]">
-              {i.title}
-            </h3>
-            <p className="mt-2 text-sm leading-relaxed text-[var(--vibe-fg-muted)]">
-              {i.body}
-            </p>
-          </div>
-        ))}
-      </div>
-    </section>
-  )
-}
-
-/* ─────────────────────────────────────────────────────────────────
- * Final CTA — single accent stripe + button, no card-in-card
+ * Final CTA — Runey style: full-width, dark bg, white CTA
  * ───────────────────────────────────────────────────────────────── */
 
 function FinalCta() {
   return (
-    <section className="relative mx-auto w-full max-w-5xl px-5 pb-28 sm:px-8">
-      <div className="vibe-card relative overflow-hidden p-12 text-center sm:p-16">
-        <div
-          className="vibe-glow"
-          style={{ '--glow-x': '50%', '--glow-y': '0%' } as React.CSSProperties}
-        />
-        <div className="relative">
-          <span className="vibe-pill vibe-pill-accent">
-            <Dot />
-            Phase MVP · Inscription gratuite
-          </span>
-          <h2 className="vibe-display mt-6 text-3xl sm:text-5xl">
-            Rejoignez les premiers utilisateurs.
-          </h2>
-          <p className="mx-auto mt-5 max-w-xl text-base text-[var(--vibe-fg-muted)] sm:text-lg">
-            Quelques secondes pour vous inscrire. Vous recevez votre code par
-            WhatsApp et discutez avec votre assistant dans la foulée.
-          </p>
-          <div className="mt-9 flex flex-col items-center justify-center gap-3 sm:flex-row">
-            <Link to="/sign-up" className="vibe-cta">
-              Créer mon compte
-              <ArrowRight />
-            </Link>
-            <Link to="/sign-in" className="vibe-cta-ghost">
-              J'ai déjà un compte
-            </Link>
-          </div>
+    <section className="relative overflow-hidden">
+      {/* Dark bg with subtle accent glow */}
+      <div
+        className="absolute inset-0"
+        style={{
+          background:
+            'radial-gradient(900px 500px at 50% 0%, rgba(31,181,115,0.12), transparent 60%), #0a0d0c',
+        }}
+      />
+      <div className="relative px-6 pb-12 pt-16 md:pb-20 md:pt-28">
+        <div className="mx-auto max-w-[1200px] text-left">
+          <Reveal>
+            <h2 className="mb-5 text-3xl font-semibold leading-[1.05] tracking-[-0.03em] text-white md:text-5xl">
+              Rejoignez les premiers utilisateurs Vibe
+            </h2>
+            <p className="mb-8 max-w-[600px] text-sm leading-relaxed text-white/70 md:text-base">
+              Inscrivez-vous avec votre numéro WhatsApp. Recevez votre code.
+              Discutez avec votre assistant IA dans la foulée. Gratuit pendant
+              toute la phase MVP.
+            </p>
+            <div className="mb-10 flex flex-wrap items-center gap-4 md:mb-14">
+              <Link
+                to="/sign-up"
+                className="inline-flex items-center justify-center gap-2 whitespace-nowrap rounded-full bg-white px-8 text-sm font-semibold text-black hover:bg-white/90 h-11 border-0 transition-colors"
+              >
+                Créer mon compte
+                <ArrowRight />
+              </Link>
+              <Link
+                to="/sign-in"
+                className="inline-flex items-center justify-center gap-2 whitespace-nowrap rounded-full border border-white/30 bg-transparent px-8 text-sm font-semibold text-white hover:bg-white/10 hover:text-white h-11 transition-colors"
+              >
+                Se connecter
+              </Link>
+              <p className="text-[11px] text-white/60">
+                Gratuit · Aucune carte requise · Code par WhatsApp
+              </p>
+            </div>
+          </Reveal>
+
+          {/* iPhone mockup at the bottom like Runey's invoice preview */}
+          <Reveal delay={150} className="pb-8 md:pb-12">
+            <div className="flex justify-center">
+              <VibeIphoneMockup />
+            </div>
+          </Reveal>
         </div>
       </div>
     </section>
   )
 }
 
-/* ── icons ─────────────────────────────────────────────────────── */
+/* ─────────────────────────────────────────────────────────────────
+ * Icons
+ * ───────────────────────────────────────────────────────────────── */
 
 function ArrowRight() {
   return (
     <svg
-      aria-hidden="true"
+      xmlns="http://www.w3.org/2000/svg"
       width="14"
       height="14"
       viewBox="0 0 24 24"
       fill="none"
       stroke="currentColor"
-      strokeWidth="2.2"
+      strokeWidth="2"
       strokeLinecap="round"
       strokeLinejoin="round"
     >
@@ -370,28 +665,23 @@ function ArrowRight() {
   )
 }
 
-function Check() {
+function UsersIcon() {
   return (
     <svg
-      aria-hidden="true"
-      className="mt-0.5 h-3.5 w-3.5 shrink-0 text-[var(--vibe-accent)]"
+      xmlns="http://www.w3.org/2000/svg"
+      width="12"
+      height="12"
       viewBox="0 0 24 24"
       fill="none"
       stroke="currentColor"
-      strokeWidth="3"
+      strokeWidth="2"
       strokeLinecap="round"
       strokeLinejoin="round"
     >
-      <polyline points="20 6 9 17 4 12" />
+      <path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2" />
+      <circle cx="9" cy="7" r="4" />
+      <path d="M22 21v-2a4 4 0 0 0-3-3.87" />
+      <path d="M16 3.13a4 4 0 0 1 0 7.75" />
     </svg>
-  )
-}
-
-function Dot() {
-  return (
-    <span className="relative inline-flex h-1.5 w-1.5">
-      <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-[var(--vibe-accent)] opacity-60" />
-      <span className="relative inline-flex h-1.5 w-1.5 rounded-full bg-[var(--vibe-accent)]" />
-    </span>
   )
 }

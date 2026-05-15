@@ -96,45 +96,41 @@
 }
 
 /* ─────────────────────────────────────────────────────────────────
- * Vibe design tokens — applied on marketing/auth pages via
- * `data-vibe-page="true"` on <html>. Strict 60-30-10 system, single
- * accent color (modern WhatsApp green), no rainbow.
- *
- * 60%  surface 0  (page background, near-black with hint of green)
- * 30%  surface 1+ (cards, header, slight elevation steps)
- * 10%  accent     (CTA, highlights, status dots — the ONLY chromatic note)
+ * Vibe design tokens — Amber warm palette (option C).
+ * 60-30-10 rule:
+ *   60%  near-black with warm amber undertone (#0C0A07)
+ *   30%  surface cards (#1A1610 / #221E14)
+ *   10%  amber accent — the ONLY chromatic note (#F59E0B / #FBBF24)
  * ───────────────────────────────────────────────────────────────── */
 
 :root {
-  /* Vibe primary = WhatsApp green, expressed as HSL for the Runey button pattern:
-     bg-gradient-to-b from-[hsl(var(--primary-light))] to-[hsl(var(--primary))]
-     + inset shadow system using hsl(var(--primary)/0.4) etc. */
-  --primary-light: 152 71% 54%;   /* #2ac989 — lighter for gradient top */
+  /* Vibe primary = amber, expressed as HSL for the Runey button pattern */
+  --primary-light: 43 96% 60%;   /* #FBBF24 — lighter for gradient top */
 
   /* 60% — dominants */
-  --vibe-bg: #0a0d0c;
-  --vibe-bg-2: #0e1311;
+  --vibe-bg: #0c0a07;
+  --vibe-bg-2: #131009;
 
   /* 30% — surfaces & lines */
-  --vibe-surface-1: #11171550; /* glass over bg */
-  --vibe-surface-2: #161d1b;
-  --vibe-surface-3: #1c2522;
+  --vibe-surface-1: rgba(26, 22, 14, 0.55);
+  --vibe-surface-2: #1a1610;
+  --vibe-surface-3: #221e14;
   --vibe-line: rgba(255, 255, 255, 0.06);
   --vibe-line-strong: rgba(255, 255, 255, 0.1);
 
   /* 10% — accent (only one) */
-  --vibe-accent: #1fb573;
-  --vibe-accent-hover: #2ac989;
-  --vibe-accent-pressed: #18a065;
-  --vibe-accent-soft: rgba(31, 181, 115, 0.12);
-  --vibe-accent-fg: #07120d;
+  --vibe-accent: #f59e0b;
+  --vibe-accent-hover: #fbbf24;
+  --vibe-accent-pressed: #d97706;
+  --vibe-accent-soft: rgba(245, 158, 11, 0.12);
+  --vibe-accent-fg: #1c1200;
 
   /* Text */
-  --vibe-fg: #e9efec;
-  --vibe-fg-muted: #99a39e;
-  --vibe-fg-subtle: #6b7570;
+  --vibe-fg: #f0ece4;
+  --vibe-fg-muted: #a09880;
+  --vibe-fg-subtle: #6e6450;
 
-  /* WhatsApp interface tokens (used by the chat mockup) */
+  /* WhatsApp interface tokens (unchanged — WA has its own palette) */
   --wa-paper: #efeae2;
   --wa-paper-dark: #0b141a;
   --wa-bubble-user: #dcf8c6;
@@ -150,20 +146,20 @@
 html[data-vibe-page="true"] {
   background: var(--vibe-bg);
   color-scheme: dark;
-  /* Override shadcn primary tokens so Runey-style buttons resolve to Vibe green */
-  --primary: 152 71% 46%;          /* hsl → #1fb573 */
-  --primary-foreground: 152 90% 6%; /* hsl → near-black fg on green */
-  --card: 160 14% 9%;              /* #161d1b */
-  --card-foreground: 160 10% 93%;  /* #e9efec */
-  --border: 160 8% 14%;            /* subtle dark border */
-  --muted-foreground: 160 5% 62%;  /* #99a39e */
-  --foreground: 160 10% 93%;
-  --background: 160 14% 6%;
+  /* Override shadcn primary tokens so Runey-style buttons resolve to amber */
+  --primary: 43 96% 52%;           /* hsl → #f59e0b */
+  --primary-foreground: 43 100% 7%; /* near-black on amber */
+  --card: 40 18% 9%;               /* #1a1610 */
+  --card-foreground: 40 20% 93%;   /* #f0ece4 */
+  --border: 40 10% 14%;            /* warm dark border */
+  --muted-foreground: 40 12% 56%;  /* #a09880 */
+  --foreground: 40 20% 93%;
+  --background: 40 18% 6%;
 }
 
 html[data-vibe-page="true"] body {
   background:
-    radial-gradient(900px 500px at 50% -10%, rgba(31, 181, 115, 0.08), transparent 60%),
+    radial-gradient(900px 500px at 50% -10%, rgba(245, 158, 11, 0.07), transparent 60%),
     var(--vibe-bg);
   color: var(--vibe-fg);
 }
@@ -179,19 +175,17 @@ html[data-vibe-page="true"] .global-chrome {
 
 /* ── Vibe primitives ─────────────────────────────────────────── */
 
-/* Single soft accent glow, no rainbow blobs */
 .vibe-glow {
   position: absolute;
   inset: 0;
   pointer-events: none;
   background: radial-gradient(
     600px 320px at var(--glow-x, 50%) var(--glow-y, 0%),
-    rgba(31, 181, 115, 0.14),
+    rgba(245, 158, 11, 0.12),
     transparent 65%
   );
 }
 
-/* Surface card, restrained */
 .vibe-card {
   background: var(--vibe-surface-2);
   border: 1px solid var(--vibe-line);
@@ -242,8 +236,8 @@ html[data-vibe-page="true"] .global-chrome {
   box-shadow:
     inset 0 1px 0 0 rgba(255, 255, 255, 0.22),
     inset 0 -1px 0 0 rgba(0, 0, 0, 0.18),
-    0 1px 3px 0 rgba(31, 181, 115, 0.4),
-    0 4px 12px -4px rgba(31, 181, 115, 0.35);
+    0 1px 3px 0 rgba(245, 158, 11, 0.4),
+    0 4px 12px -4px rgba(245, 158, 11, 0.35);
   transition:
     filter 150ms ease,
     box-shadow 150ms ease,
@@ -255,15 +249,15 @@ html[data-vibe-page="true"] .global-chrome {
   box-shadow:
     inset 0 1px 0 0 rgba(255, 255, 255, 0.28),
     inset 0 -1px 0 0 rgba(0, 0, 0, 0.2),
-    0 2px 6px 0 rgba(31, 181, 115, 0.45),
-    0 8px 20px -4px rgba(31, 181, 115, 0.4);
+    0 2px 6px 0 rgba(245, 158, 11, 0.45),
+    0 8px 20px -4px rgba(245, 158, 11, 0.4);
 }
 
 .vibe-cta:active {
   filter: brightness(0.96);
   box-shadow:
     inset 0 2px 4px 0 rgba(0, 0, 0, 0.22),
-    0 1px 2px 0 rgba(31, 181, 115, 0.3);
+    0 1px 2px 0 rgba(245, 158, 11, 0.3);
 }
 
 .vibe-cta-ghost {

@@ -7,3 +7,7 @@ export { default as todos_delete } from "./todos/delete.operation";
 export { default as todos_toggle } from "./todos/toggle.operation";
 export { default as todos_aiGenerate } from "./todos/ai-generate.operation";
 export { default as ai_todoPlannerAgent } from "./ai/todo-planner.agent";
+export { default as auth_startPhoneOtp } from "./auth/start-phone-otp.operation";
+export { default as auth_verifyPhoneOtp } from "./auth/verify-phone-otp.operation";
+export { default as auth_vibeMe } from "./auth/vibe-me.operation";
+export { default as auth_vibeLogout } from "./auth/vibe-logout.operation";

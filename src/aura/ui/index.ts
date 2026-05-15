@@ -55,3 +55,6 @@ export type { VibeMarkProps } from "./vibe-mark";
 
 export { VibeWhatsAppMockup } from "./vibe-whatsapp-mockup";
 export type { VibeWhatsAppMockupProps } from "./vibe-whatsapp-mockup";
+
+export { VibeIphoneMockup } from "./vibe-iphone-mockup";
+export type { VibeIphoneMockupProps } from "./vibe-iphone-mockup";
