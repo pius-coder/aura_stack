@@ -1,9 +1,8 @@
-import "server-only";
+
 
 import { createHash, createHmac, randomBytes, timingSafeEqual } from "node:crypto";
 
 const DEFAULT_SECRET = "aura-dev-secret-change-me";
-const DEFAULT_CSRF_SECRET = "aura-dev-csrf-secret";
 
 function assertProductionSecret(name: string, value: string | undefined, dev: string): string {
   if (value && value !== dev) return value;

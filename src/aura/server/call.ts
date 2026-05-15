@@ -1,14 +1,18 @@
-import "server-only";
+
 
 import { cache } from "react";
-import { headers, cookies } from "next/headers";
 import { errorEnvelope, successEnvelope, type AuraEnvelope } from "@/aura/core/envelope";
 import { AuraError, toPublicAuraError } from "@/aura/core/errors";
 import "@/aura.registry";
 import { createAuraContext } from "./create-context";
 import { getOperation } from "./registry";
 import { publishInvalidation } from "./invalidate";
-import type { AuraCookieMutation, AuraSource } from "./context";
+import {
+  getAuraRequestHeaders,
+  applyAuraCookies,
+  createAuraRequest,
+} from "./context-adapter";
+import type { AuraSource } from "./context";
 import { v4 as uuidv4 } from "uuid";
 
 export interface CallAuraServerOptions {
@@ -94,11 +98,11 @@ async function runAuraServerUncached<TData = unknown>(
     });
   }
 
-  const resolvedHeaders = requestHeaders ?? await headers();
+  const resolvedHeaders: Headers = requestHeaders ?? getAuraRequestHeaders();
   const requestId = uuidv4();
-  const request = new Request("http://aura.local/rsc", {
-    headers: resolvedHeaders,
-  });
+  const request = requestHeaders
+    ? new Request("http://aura.local/rsc", { headers: resolvedHeaders })
+    : createAuraRequest();
 
   const ctx = await createAuraContext({
     request,
@@ -114,21 +118,20 @@ async function runAuraServerUncached<TData = unknown>(
       req: request,
     })) as TData;
 
-    const isMutation = operation.type === "mutate";
-    const invalidates = isMutation ? [...operation.entities] : [];
+    const isMutating = operation.type === "mutate" || operation.type === "action";
+    const invalidates = isMutating
+      ? [...new Set([...operation.entities, ...ctx.invalidatedEntities])]
+      : [];
 
     // Apply any cookie mutations queued by the operation (session clear,
-    // CSRF rotation, …). In RSC we can only WRITE cookies via the `cookies()`
-    // API, and only when running inside a Server Action or Route Handler.
-    // In pure RSC it throws; we catch and continue silently — the bridge
-    // route handles user-driven mutations where cookies must stick.
+    // CSRF rotation, …). TanStack Start allows cookie writes via setCookie
+    // from @tanstack/start-server-core, which we expose through the
+    // context-adapter module.
     if (ctx.cookies.set.length > 0) {
-      await applyCookieMutations(ctx.cookies.set).catch(() => {
-        /* RSC render — cookies cannot be written here, ignore */
-      });
+      applyAuraCookies(ctx.cookies.set);
     }
 
-    if (isMutation && invalidates.length > 0) {
+    if (isMutating && invalidates.length > 0) {
       void publishInvalidation({ keys: invalidates });
     }
 
@@ -137,29 +140,16 @@ async function runAuraServerUncached<TData = unknown>(
       requestId,
       bumps: ctx.bump.all(),
       invalidates,
-      refresh: isMutation,
+      refresh: isMutating,
     });
   } catch (error) {
     // Even on error we might need to clear an invalid session cookie.
     if (ctx.cookies.set.length > 0) {
-      await applyCookieMutations(ctx.cookies.set).catch(() => {});
+      applyAuraCookies(ctx.cookies.set);
     }
     return errorEnvelope({
       error: toPublicAuraError(error),
       requestId,
     });
-  }
-}
-
-async function applyCookieMutations(
-  mutations: AuraCookieMutation[],
-): Promise<void> {
-  const store = await cookies();
-  for (const mutation of mutations) {
-    if (mutation.options.maxAge === 0) {
-      store.delete(mutation.name);
-    } else {
-      store.set(mutation.name, mutation.value, mutation.options);
-    }
   }
 }

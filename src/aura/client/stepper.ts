@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useMemo, useRef, useState } from "react";
+import { useCallback, useRef, useState, useEffect } from "react";
 import { zodResolver } from "@hookform/resolvers/zod";
 import {
   useForm,
@@ -68,13 +68,19 @@ export function useStepperForm<
   const store = storeRef.current();
   const [hydrated, setHydrated] = useState(false);
 
+  // Hydrate persisted state on mount (client only).
+  useEffect(() => {
+    void storeRef.current.persist.rehydrate();
+    setHydrated(true);
+  }, []);
+
   const currentStep = store.step;
   const currentStepDef = steps[currentStep];
   const isLastStep = currentStep === steps.length - 1;
 
   const form = useForm<TValues>({
     resolver: currentStepDef
-      ? (zodResolver(currentStepDef.schema) as Resolver<TValues>)
+      ? (zodResolver(currentStepDef.schema as never) as Resolver<TValues>)
       : undefined,
     defaultValues: {
       ...(currentStepDef?.defaultValues ?? {}),

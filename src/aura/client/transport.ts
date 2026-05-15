@@ -10,7 +10,7 @@ export interface AuraClientConfig {
 }
 
 const defaultConfig: AuraClientConfig = {
-  basePath: "/api/aura",
+  basePath: "/aura",
   csrfCookieName: "aura_csrf",
   csrfHeaderName: "x-aura-csrf",
 };
@@ -65,26 +65,53 @@ export async function callAuraOperationWithMeta<TData = unknown>(
   options: CallAuraOperationOptions,
 ): Promise<AuraOperationResult<TData>> {
   const config = getAuraClientConfig();
-  const response = await fetch(
-    operationUrl(config.basePath, options.operationName),
-    {
-      method: "POST",
-      credentials: "same-origin",
-      headers: {
-        "content-type": "application/json",
-        [config.csrfHeaderName]: readCookie(config.csrfCookieName) ?? "",
-      },
-      body: JSON.stringify({
-        input: options.input,
-        params: options.params,
-      }),
-      signal: options.signal,
-    },
-  );
 
-  const envelope = (await response
-    .json()
-    .catch(() => null)) as AuraEnvelope<TData> | null;
+  async function send(): Promise<{ response: Response; envelope: AuraEnvelope<TData> | null }> {
+    const response = await fetch(
+      operationUrl(config.basePath, options.operationName),
+      {
+        method: "POST",
+        credentials: "same-origin",
+        headers: {
+          "content-type": "application/json",
+          [config.csrfHeaderName]: readCookie(config.csrfCookieName) ?? "",
+        },
+        body: JSON.stringify({
+          input: options.input,
+          params: options.params,
+        }),
+        signal: options.signal,
+      },
+    );
+    const envelope = (await response
+      .json()
+      .catch(() => null)) as AuraEnvelope<TData> | null;
+    return { response, envelope };
+  }
+
+  let { response, envelope } = await send();
+
+  // Auto-heal CSRF: if the request was rejected because the CSRF token is
+  // missing/stale (e.g. server restarted with a new secret, browser still
+  // holds the old cookie), refetch the manifest — which atomically reissues
+  // a fresh CSRF cookie via Set-Cookie — and retry once.
+  if (
+    envelope &&
+    !envelope.ok &&
+    envelope.error.code === "FORBIDDEN" &&
+    /csrf/i.test(envelope.error.message)
+  ) {
+    try {
+      await fetch(operationUrl(config.basePath, "_manifest"), {
+        method: "GET",
+        credentials: "same-origin",
+      });
+    } catch {
+      /* fall through and surface the original error */
+    }
+    ({ response, envelope } = await send());
+  }
+
   if (!envelope) {
     throw new AuraClientError({
       code: "BAD_RESPONSE",

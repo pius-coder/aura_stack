@@ -21,3 +21,5 @@ export { AuraHydrationBoundary } from "./hydration-boundary";
 export type { AuraHydrationBoundaryProps } from "./hydration-boundary";
 export { AuraGuard } from "./guard";
 export type { AuraGuardProps } from "./guard";
+export { useAuraPaginatedQuery } from "./paginated-query";
+export type { UseAuraPaginatedQueryOptions, PaginatedResult } from "./paginated-query";

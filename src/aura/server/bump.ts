@@ -1,4 +1,4 @@
-import "server-only";
+
 
 import type { AuraBump, AuraBumpVariant } from "@/aura/core/envelope";
 

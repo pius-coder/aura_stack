@@ -33,7 +33,7 @@ export function useAuraForm<TValues extends FieldValues, TData = unknown>(
   } = options;
   const form = useForm<TValues>({
     ...formOptions,
-    resolver: zodResolver(schema) as Resolver<TValues>,
+    resolver: zodResolver(schema as never) as Resolver<TValues>,
   });
 
   const mutation = useAuraMutation<TValues, TData>(operationName, {

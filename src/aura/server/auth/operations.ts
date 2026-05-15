@@ -1,4 +1,4 @@
-import "server-only";
+
 
 import { AuraOtpPurpose } from "@/generated/prisma/enums";
 import { AuraError } from "@/aura/core/errors";

@@ -1,8 +1,9 @@
-import "server-only";
+
 
 import { cache } from "react";
 import { db } from "./db";
 import type { AuraContext, AuraSource } from "./context";
+import type { OperationRef } from "@/aura/core/types";
 import { createAuraLogger } from "./logger";
 import { createBumpStore } from "./bump";
 import { createNotificationDispatcher } from "./notifications";
@@ -14,6 +15,8 @@ import {
 } from "./transport/cookies";
 import { toPrismaJson } from "./json";
 import { createAuraStorage } from "./storage";
+import { createAuraScheduler } from "./scheduler";
+import { createAuraAgent } from "./ai/context-binding";
 import { v4 as uuidv4 } from "uuid";
 
 /**
@@ -67,6 +70,43 @@ export async function createAuraContext(
       },
     });
   }
+
+  // Lazy-loaded `runOperation` — defined here to avoid a circular import
+  // with `runner.ts` which also creates contexts.
+  async function runOperation<TInput, TOutput>(
+    ref: OperationRef | string,
+    input: TInput,
+  ): Promise<TOutput> {
+    const { getOperation } = await import("./registry");
+    const name = typeof ref === "string" ? ref : ref._name;
+    const operation = getOperation(name);
+    if (!operation) {
+      const { AuraError } = await import("@/aura/core/errors");
+      throw new AuraError("NOT_FOUND", `Opération Aura introuvable: ${name}`);
+    }
+
+    const out = await operation.execute({
+      ctx,
+      input,
+      params: undefined,
+      req: options.request,
+    });
+
+    // Merge inner mutation/action invalidations into the outer entity set
+    // (Decision 14 — invalidation propagates up through nested calls).
+    if (operation.type === "mutate" || operation.type === "action") {
+      for (const tag of operation.entities) {
+        invalidatedEntities.add(tag);
+      }
+    }
+
+    return out as TOutput;
+  }
+
+  // Tracks instance-level + type-level invalidations queued by mutations
+  // and actions. Consumed by the runner / call paths via `ctx.invalidate`
+  // and the operation's static `entities` list.
+  const invalidatedEntities = new Set<string>();
 
   const ctx: AuraContext = {
     db,
@@ -132,6 +172,38 @@ export async function createAuraContext(
       set: cookieMutations,
     },
     storage: createAuraStorage(),
+    scheduler: createAuraScheduler(db),
+    agent: await createAuraAgent(),
+    // Typed `api` object refs — see `core/types.ts` for the OperationRef
+    // contract. String names are accepted for backward compatibility.
+    runQuery: runOperation as AuraContext["runQuery"],
+    runMutation: runOperation as AuraContext["runMutation"],
+    runAction: runOperation as AuraContext["runAction"],
+    async paginate(model, opts) {
+      const { paginate: paginateFn } = await import("./pagination");
+      return paginateFn(
+        model as unknown as { findMany: (args: never) => Promise<unknown> },
+        {
+          ...opts,
+          operationHash: opts.operationHash ?? "anonymous",
+        },
+      ) as never;
+    },
+    invalidate(target) {
+      // Decision 16: support both type-level (`{ entity }`) and
+      // instance-level (`{ entity, id }`) invalidation. We serialize as
+      // `Entity` and `Entity:id` respectively so the broadcast layer
+      // can pattern-match.
+      if (target.id) {
+        invalidatedEntities.add(`${target.entity}:${target.id}`);
+      } else {
+        invalidatedEntities.add(target.entity);
+      }
+    },
+    invalidatedEntities,
+    // Default `fetch` for actions (queries/mutations should not use it,
+    // but exposing it on the union surface keeps the runtime simple).
+    fetch: globalThis.fetch.bind(globalThis),
   };
 
   return ctx;

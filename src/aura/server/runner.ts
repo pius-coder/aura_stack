@@ -1,4 +1,4 @@
-import "server-only";
+
 
 import {
   errorEnvelope,
@@ -8,6 +8,7 @@ import {
 import { AuraError, toPublicAuraError } from "@/aura/core/errors";
 import { getOperation } from "./registry";
 import { createAuraContext } from "./create-context";
+import { createReadOnlyDb } from "./db-readonly";
 import type { AuraContext } from "./context";
 import { publishInvalidation } from "./invalidate";
 import { v4 as uuidv4 } from "uuid";
@@ -17,7 +18,7 @@ export interface RunAuraOperationOptions {
   input: unknown;
   params?: unknown;
   request: Request;
-  source?: "bridge" | "rsc" | "internal" | "cron" | "test";
+  source?: "bridge" | "rsc" | "internal" | "cron" | "scheduler" | "test";
 }
 
 export async function runAuraOperation<TData = unknown>(
@@ -70,20 +71,28 @@ export async function runAuraOperation<TData = unknown>(
     };
   }
 
+  // Per-type context narrowing (Decision 12, task 7.4):
+  //   - queries get a Proxy-wrapped read-only db
+  //   - mutations get the full db
+  //   - actions get a tombstoned db that throws on every property
+  const handlerCtx = withTypedDb(ctx, operation.type);
+
   try {
     const data = (await operation.execute({
-      ctx,
+      ctx: handlerCtx,
       input: options.input,
       params: options.params,
       req: options.request,
     })) as TData;
 
-    const isMutation = operation.type === "mutate";
-    const invalidates = isMutation ? [...operation.entities] : [];
+    const isMutating = operation.type === "mutate" || operation.type === "action";
+    // Static entities declared on the operation + dynamic invalidations
+    // queued via `ctx.invalidate(...)` during the handler execution.
+    const invalidates = isMutating
+      ? [...new Set([...operation.entities, ...ctx.invalidatedEntities])]
+      : [];
 
-    if (isMutation && invalidates.length > 0) {
-      // L'invalidation est 100 % client : publish vers le broadcast server,
-      // qui fan-out aux clients TanStack Query connectés.
+    if (isMutating && invalidates.length > 0) {
       void publishInvalidation({ keys: invalidates });
     }
 
@@ -93,7 +102,12 @@ export async function runAuraOperation<TData = unknown>(
         requestId: ctx.requestId,
         bumps: ctx.bump.all(),
         invalidates,
-        refresh: isMutation,
+        // refresh forces `router.invalidate()` which re-runs every loader on
+        // the page — heavy and almost always redundant with TanStack Query
+        // invalidation that already happens client-side. Leave it OFF by
+        // default; callers can opt-in by setting `refresh: true` in
+        // `useAuraMutation` options.
+        refresh: false,
       }),
       status: 200,
       cookies: ctx.cookies.set,
@@ -116,4 +130,29 @@ export async function runAuraOperation<TData = unknown>(
       cookies: ctx.cookies.set,
     };
   }
+}
+
+/**
+ * Narrow a base context to the per-operation-type surface required by the
+ * design (Decision 12). Queries see a read-only DB Proxy; actions cannot
+ * access the DB directly (they must go through `runQuery`/`runMutation`).
+ */
+function withTypedDb(ctx: AuraContext, type: "query" | "mutate" | "action"): AuraContext {
+  if (type === "query") {
+    return { ...ctx, db: createReadOnlyDb(ctx.db) };
+  }
+  if (type === "action") {
+    return {
+      ...ctx,
+      db: new Proxy({} as AuraContext["db"], {
+        get(_, prop) {
+          throw new AuraError(
+            "INTERNAL_ERROR",
+            `Direct DB access is forbidden in actions (attempted: ${String(prop)}). Use ctx.runQuery / ctx.runMutation instead.`,
+          );
+        },
+      }),
+    };
+  }
+  return ctx;
 }

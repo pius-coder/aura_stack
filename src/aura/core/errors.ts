@@ -12,7 +12,9 @@ export type AuraErrorCode =
   | "OTP_INVALID"
   | "OTP_EXPIRED"
   | "INTERNAL_ERROR"
-  | "BAD_REQUEST";
+  | "BAD_REQUEST"
+  | "METHOD_NOT_ALLOWED"
+  | "BAD_RESPONSE";
 
 export type AuraFieldErrors = Record<string, string[]>;
 
@@ -62,6 +64,8 @@ export function statusFromCode(code: AuraErrorCode): number {
       return 409;
     case "RATE_LIMITED":
       return 429;
+    case "METHOD_NOT_ALLOWED":
+      return 405;
     case "INTERNAL_ERROR":
       return 500;
     default:

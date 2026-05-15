@@ -1,4 +1,4 @@
-import "server-only";
+
 
 import type { AuraClientManifest } from "@/aura/shared/manifest";
 import type { RegisteredAuraOperation } from "./operation";

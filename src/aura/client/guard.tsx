@@ -1,6 +1,6 @@
 "use client";
 
-import { useRouter } from "next/navigation";
+import { useNavigate } from "@tanstack/react-router";
 import { useEffect } from "react";
 import type { ReactNode } from "react";
 import { useAuraQuery } from "./hooks";
@@ -62,7 +62,7 @@ export function AuraGuard({
   redirectTo,
   authOperationName = "auth.me",
 }: AuraGuardProps) {
-  const router = useRouter();
+  const navigate = useNavigate();
   const auth = useAuraQuery<AuthSessionResult>(authOperationName, {
     retry: false,
     refetchOnWindowFocus: false,
@@ -70,9 +70,9 @@ export function AuraGuard({
 
   useEffect(() => {
     if (auth.isError && redirectTo) {
-      router.push(redirectTo);
+      navigate({ to: redirectTo });
     }
-  }, [auth.isError, redirectTo, router]);
+  }, [auth.isError, redirectTo, navigate]);
 
   if (auth.isPending) {
     return (

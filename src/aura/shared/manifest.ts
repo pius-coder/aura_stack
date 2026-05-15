@@ -1,4 +1,4 @@
-export type AuraManifestOperationType = "query" | "mutate";
+export type AuraManifestOperationType = "query" | "mutate" | "action";
 export type AuraManifestAccess = "auth" | "public" | "internal";
 
 export interface AuraManifestOperation {

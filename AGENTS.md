@@ -63,4 +63,12 @@ skills:
     use: "@tanstack/start-server-core#start-server-core"
   - when: "Programmatic route tree building as an alternative to filesystem conventions: rootRoute, index, route, layout, physical, defineVirtualSubtreeConfig. Use with TanStack Router plugin's virtualRouteConfig option."
     use: "@tanstack/virtual-file-routes#virtual-file-routes"
+## Testing requirements
+
+After completing any task or phase, run all tests with:
+```
+bun run test
+```
+
+This executes `vitest run`. Fix any failures before marking the task done or moving to the next task.
 <!-- intent-skills:end -->

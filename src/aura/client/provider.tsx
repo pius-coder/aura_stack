@@ -13,6 +13,7 @@ import {
   useState,
   type ReactNode,
 } from "react";
+import { NuqsAdapter } from "nuqs/adapters/tanstack-router";
 import {
   configureAuraClient,
   type AuraClientConfig,
@@ -84,7 +85,9 @@ function AuraRealtimeProvider({
   wsUrl,
 }: {
   children: ReactNode;
-  wsUrl: string;
+  /** Optional WebSocket URL. When undefined, only the same-browser
+   *  BroadcastChannel layer runs — fast, free, no network hop. */
+  wsUrl?: string;
 }) {
   const queryClient = useQueryClient();
   const socketRef = useRef<WebSocket | null>(null);
@@ -169,10 +172,11 @@ function AuraRealtimeProvider({
       invalidateKeys(msg.keys);
     };
 
-    // ── WebSocket (leader only) ─────────────────────────────────────────────
+    // ── WebSocket (leader only, only when wsUrl provided) ──────────────────
     function connectWs() {
       if (unmountedRef.current) return;
       if (!isLeaderRef.current) return;
+      if (!wsUrl) return; // no WS configured — BroadcastChannel only
 
       console.log("[aura:realtime] (leader) connecting to", wsUrl);
       const ws = new WebSocket(wsUrl);
@@ -353,8 +357,14 @@ export function AuraClientProvider({
       new QueryClient({
         defaultOptions: {
           queries: {
-            staleTime: 30_000,
+            // staleTime: 0 → invalidated queries refetch immediately when the
+            // broadcast arrives. Without this, an invalidation on a "fresh"
+            // query is a no-op until staleTime elapses.
+            staleTime: 0,
+            // Keep cache around for 5 min to avoid refetching on every navigation.
+            gcTime: 5 * 60_000,
             refetchOnWindowFocus: false,
+            refetchOnReconnect: true,
             retry: 1,
           },
           mutations: { retry: false },
@@ -362,17 +372,17 @@ export function AuraClientProvider({
       }),
   );
 
-  const resolvedWsUrl = wsUrl ?? process.env.NEXT_PUBLIC_AURA_WS_URL;
+  const resolvedWsUrl = wsUrl ?? import.meta.env.VITE_AURA_WS_URL;
 
   return (
     <QueryClientProvider client={ownedQueryClient}>
-      {resolvedWsUrl ? (
+      <NuqsAdapter>
+        {/* Always mount the realtime provider so BroadcastChannel works
+            cross-tab on the same browser, even without a WebSocket. */}
         <AuraRealtimeProvider wsUrl={resolvedWsUrl}>
           {children}
         </AuraRealtimeProvider>
-      ) : (
-        children
-      )}
+      </NuqsAdapter>
     </QueryClientProvider>
   );
 }

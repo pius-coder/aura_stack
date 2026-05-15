@@ -1,4 +1,4 @@
-import "server-only";
+
 
 import { createHmac, randomUUID } from "node:crypto";
 import { getAuraSecret } from "./crypto";
@@ -28,7 +28,7 @@ function resolveBroadcastHttpUrl(): string | null {
   const explicit = process.env.AURA_BROADCAST_INTERNAL_URL;
   if (explicit) return explicit.replace(/\/$/, "");
 
-  const wsUrl = process.env.NEXT_PUBLIC_AURA_WS_URL;
+  const wsUrl = process.env.VITE_AURA_WS_URL ?? process.env.NEXT_PUBLIC_AURA_WS_URL;
   if (!wsUrl) return null;
 
   try {

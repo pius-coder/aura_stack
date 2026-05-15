@@ -1,0 +1,350 @@
+generator client {
+  provider = "prisma-client"
+  output   = "../src/generated/prisma"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+// ── Aura enums ──
+
+enum AuraOtpPurpose {
+  REGISTER_PHONE
+  LOGIN_PHONE
+  RESET_PASSWORD
+  CHANGE_PHONE
+  SENSITIVE_ACTION
+}
+
+enum AuraOutboxStatus {
+  PENDING
+  PROCESSING
+  SUCCEEDED
+  FAILED
+}
+
+enum AuraJobRunStatus {
+  PENDING
+  RUNNING
+  SUCCEEDED
+  FAILED
+  CANCELLED
+}
+
+// ── Aura auth core ──
+
+model AuraUser {
+  id             String   @id @default(cuid())
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+  disabledAt     DateTime?
+  deletedAt      DateTime?
+  sessionVersion Int      @default(1)
+
+  email       String? @unique
+  displayName String?
+  isAdmin     Boolean @default(false)
+  isBlocked   Boolean @default(false)
+
+  // Aura relations
+  phoneIdentities    AuraPhoneIdentity[]
+  passwordCredential AuraPasswordCredential?
+  sessions           AuraSession[]
+  notifications      AuraNotification[]
+  auditLogs          AuraAuditLog[]
+}
+
+model AuraPhoneIdentity {
+  id                 String    @id @default(cuid())
+  userId             String
+  countryCode        String
+  nationalNumber     String
+  phoneE164          String    @unique
+  verifiedAt         DateTime?
+  whatsappVerifiedAt DateTime?
+  createdAt          DateTime  @default(now())
+  updatedAt          DateTime  @updatedAt
+  user               AuraUser  @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@index([phoneE164])
+}
+
+model AuraPasswordCredential {
+  id           String   @id @default(cuid())
+  userId       String   @unique
+  passwordHash String
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+  user         AuraUser @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
+
+model AuraOtpChallenge {
+  id          String         @id @default(cuid())
+  userId      String?
+  phoneE164   String
+  purpose     AuraOtpPurpose
+  codeHash    String
+  expiresAt   DateTime
+  consumedAt  DateTime?
+  attempts    Int            @default(0)
+  maxAttempts Int            @default(5)
+  metadata    Json?
+  sentAt      DateTime?
+  createdAt   DateTime       @default(now())
+
+  @@index([phoneE164, purpose])
+  @@index([userId])
+  @@index([expiresAt])
+}
+
+model AuraSession {
+  id             String    @id @default(cuid())
+  tokenHash      String    @unique
+  csrfTokenHash  String
+  userId         String
+  expiresAt      DateTime
+  revokedAt      DateTime?
+  lastUsedAt     DateTime  @default(now())
+  userAgentHash  String?
+  ipHash         String?
+  sessionVersion Int       @default(1)
+  createdAt      DateTime  @default(now())
+  updatedAt      DateTime  @updatedAt
+  user           AuraUser  @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@index([expiresAt])
+}
+
+model AuraRateLimitBucket {
+  key       String   @id
+  count     Int      @default(0)
+  resetAt   DateTime
+  updatedAt DateTime @updatedAt
+}
+
+model AuraNotification {
+  id              String    @id @default(cuid())
+  name            String
+  recipientUserId String?
+  title           String
+  body            String
+  payload         Json?
+  readAt          DateTime?
+  createdAt       DateTime  @default(now())
+  recipient       AuraUser? @relation(fields: [recipientUserId], references: [id], onDelete: Cascade)
+
+  @@index([recipientUserId, readAt, createdAt])
+  @@index([name])
+}
+
+model AuraOutboxEvent {
+  id          String           @id @default(cuid())
+  type        String
+  payload     Json
+  status      AuraOutboxStatus @default(PENDING)
+  attempts    Int              @default(0)
+  maxAttempts Int              @default(5)
+  nextRunAt   DateTime         @default(now())
+  lockedAt    DateTime?
+  processedAt DateTime?
+  error       String?
+  createdAt   DateTime         @default(now())
+  updatedAt   DateTime         @updatedAt
+
+  @@index([status, nextRunAt])
+  @@index([type])
+}
+
+model AuraJobRun {
+  id            String           @id @default(cuid())
+  jobName       String
+  operationName String?
+  input         Json?
+  status        AuraJobRunStatus
+  requestId     String?
+  attempts      Int              @default(1)
+  maxAttempts   Int              @default(3)
+  metadata      Json?
+  error         String?
+  lastError     String?
+  runAt         DateTime?
+  lockedUntil   DateTime?
+  startedAt     DateTime         @default(now())
+  finishedAt    DateTime?
+  completedAt   DateTime?
+  createdAt     DateTime         @default(now())
+
+  @@index([jobName, startedAt])
+  @@index([status])
+  @@index([status, runAt])
+  @@index([operationName])
+}
+
+model AuraAuditLog {
+  id          String    @id @default(cuid())
+  actorUserId String?
+  action      String
+  operation   String?
+  requestId   String?
+  source      String
+  metadata    Json?
+  createdAt   DateTime  @default(now())
+  actor       AuraUser? @relation(fields: [actorUserId], references: [id], onDelete: SetNull)
+
+  @@index([actorUserId, createdAt])
+  @@index([action, createdAt])
+  @@index([requestId])
+}
+
+model AuraFile {
+  id        String   @id @default(cuid())
+  name      String
+  key       String   @unique
+  url       String
+  mimeType  String
+  size      Int
+  prefix    String
+  storage   String   @default("filesystem")
+  metadata  Json?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([prefix])
+  @@index([storage])
+}
+
+// ── Aura enhanced storage (Decision 17) ──
+
+model AuraStoredFile {
+  id          String   @id @default(cuid())
+  filename    String
+  contentType String
+  size        Int
+  path        String   @unique
+  driver      String   @default("filesystem")
+  uploadedBy  String?
+  metadata    Json?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@index([driver])
+  @@index([uploadedBy])
+}
+
+// ── Aura workflow runs (Decision 22) ──
+
+enum AuraWorkflowStatus {
+  PENDING
+  RUNNING
+  SLEEPING
+  COMPLETED
+  FAILED
+  CANCELLED
+}
+
+model AuraWorkflowRun {
+  id              String             @id @default(cuid())
+  workflowName    String
+  input           Json
+  status          AuraWorkflowStatus @default(PENDING)
+  currentStep     String?
+  completedSteps  Json               @default("[]")
+  error           String?
+  startedAt       DateTime           @default(now())
+  completedAt     DateTime?
+  createdAt       DateTime           @default(now())
+  updatedAt       DateTime           @updatedAt
+
+  @@index([workflowName, status])
+  @@index([status])
+}
+
+// ── Aura AI agent state (Decision 27) ──
+
+enum AuraAgentThreadStatus {
+  ACTIVE
+  ARCHIVED
+}
+
+model AuraAgentThread {
+  id        String                @id @default(cuid())
+  agentName String
+  userId    String?
+  title     String?
+  metadata  Json?
+  status    AuraAgentThreadStatus  @default(ACTIVE)
+  createdAt DateTime              @default(now())
+  updatedAt DateTime              @updatedAt
+  messages  AuraAgentMessage[]
+
+  @@index([agentName, userId])
+  @@index([userId, updatedAt])
+}
+
+model AuraAgentMessage {
+  id           String          @id @default(cuid())
+  threadId     String
+  role         String
+  content      String
+  toolCalls    Json?
+  toolResults  Json?
+  metadata     Json?
+  createdAt    DateTime        @default(now())
+  thread       AuraAgentThread @relation(fields: [threadId], references: [id], onDelete: Cascade)
+
+  @@index([threadId, createdAt])
+}
+
+model AuraAIUsage {
+  id            String   @id @default(cuid())
+  agentName     String
+  threadId      String?
+  userId        String?
+  model         String
+  provider      String
+  inputTokens   Int
+  outputTokens  Int
+  totalTokens   Int
+  latencyMs     Int
+  estimatedCost Float?
+  createdAt     DateTime @default(now())
+
+  @@index([agentName, createdAt])
+  @@index([userId, createdAt])
+  @@index([threadId, createdAt])
+}
+
+// ── Application: Todo ──
+
+enum TodoStatus {
+  PENDING
+  IN_PROGRESS
+  DONE
+}
+
+enum TodoPriority {
+  LOW
+  MEDIUM
+  HIGH
+  URGENT
+}
+
+model Todo {
+  id          String       @id @default(cuid())
+  title       String
+  description String?
+  status      TodoStatus   @default(PENDING)
+  priority    TodoPriority @default(MEDIUM)
+  dueDate     DateTime?
+  userId      String?
+  aiGenerated Boolean      @default(false)
+  metadata    Json?
+  createdAt   DateTime     @default(now())
+  updatedAt   DateTime     @updatedAt
+
+  @@index([userId, status])
+  @@index([status, createdAt])
+}

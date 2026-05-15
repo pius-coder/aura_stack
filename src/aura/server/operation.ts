@@ -1,11 +1,11 @@
-import "server-only";
+
 
 import { z } from "zod";
 import { AuraError } from "@/aura/core/errors";
 import type { AuraContext, AuthenticatedAuraContext } from "./context";
 import { registerOperation } from "./registry";
 
-export type OperationType = "query" | "mutate";
+export type OperationType = "query" | "mutate" | "action";
 export type OperationAccess = "auth" | "public" | "internal";
 export type EntityTag = string;
 
@@ -74,6 +74,10 @@ export interface AuraOperation<TInput, TParams, TOutput, TName extends string> {
   readonly entities: readonly EntityTag[];
   readonly commonFns: readonly DefinedCommonFn<unknown, unknown>[];
   readonly handler: OperationHandler<TInput, TParams, TOutput>;
+  /** Phantom — used by `InferOperationInput<typeof op>` to recover the type. */
+  readonly _input?: TInput;
+  /** Phantom — used by `InferOperationOutput<typeof op>` to recover the type. */
+  readonly _output?: TOutput;
   execute(args: {
     ctx: AuraContext;
     input: unknown;
@@ -99,15 +103,7 @@ export interface RegisteredAuraOperation {
   }): Promise<unknown>;
 }
 
-export type InferOperationInput<TOperation> =
-  TOperation extends AuraOperation<infer TInput, unknown, unknown, string>
-    ? TInput
-    : never;
-
-export type InferOperationOutput<TOperation> =
-  TOperation extends AuraOperation<unknown, unknown, infer TOutput, string>
-    ? TOutput
-    : never;
+export type { InferOperationInput, InferOperationOutput } from "@/aura/core/types";
 
 interface BuilderState<TInput, TParams, TName extends string> {
   name: TName;
@@ -342,6 +338,7 @@ function makeHandlerStage<TInput, TParams, TName extends string>(
 interface RootStage<TName extends string> {
   query(): HandlerStage<void, void, TName>;
   mutate(): HandlerStage<void, void, TName>;
+  action(): HandlerStage<void, void, TName>;
 }
 
 function makeRootStage<TName extends string>(
@@ -354,6 +351,10 @@ function makeRootStage<TName extends string>(
     },
     mutate() {
       state.type = "mutate";
+      return makeHandlerStage(state);
+    },
+    action() {
+      state.type = "action";
       return makeHandlerStage(state);
     },
   };

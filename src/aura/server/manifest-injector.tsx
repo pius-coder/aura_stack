@@ -1,4 +1,4 @@
-import "server-only";
+
 import "@/aura.registry";
 
 import type { ReactNode } from "react";
