@@ -14,55 +14,46 @@ const THEME_INIT_SCRIPT = `(function(){try{var stored=window.localStorage.getIte
 export const Route = createRootRoute({
   head: () => ({
     meta: [
+      { charSet: 'utf-8' },
+      { name: 'viewport', content: 'width=device-width, initial-scale=1' },
+      { title: 'Vibe — Votre prestataire de confiance, en 3 minutes' },
       {
-        charSet: 'utf-8',
-      },
-      {
-        name: 'viewport',
-        content: 'width=device-width, initial-scale=1',
-      },
-      {
-        title: 'TanStack Start Starter',
+        name: 'description',
+        content:
+          "Vibe met en relation prestataires et clients via WhatsApp et un assistant IA personnel. Plateforme de confiance pour le Cameroun.",
       },
     ],
-    links: [
-      {
-        rel: 'stylesheet',
-        href: appCss,
-      },
-    ],
+    links: [{ rel: 'stylesheet', href: appCss }],
   }),
   shellComponent: RootDocument,
 })
 
 function RootDocument({ children }: { children: React.ReactNode }) {
   return (
-    <html lang="en" suppressHydrationWarning>
+    <html lang="fr" suppressHydrationWarning>
       <head>
         <script dangerouslySetInnerHTML={{ __html: THEME_INIT_SCRIPT }} />
         <HeadContent />
       </head>
       <body className="font-sans antialiased [overflow-wrap:anywhere] selection:bg-[rgba(79,184,178,0.24)]">
         <AuraClientProvider>
-          <Header />
+          {/* Global chrome — hidden automatically on luminous pages via CSS
+              (see `[data-lum-page] .global-chrome` rule in styles.css). */}
+          <div className="global-chrome">
+            <Header />
+          </div>
           {children}
-          <Footer />
+          <div className="global-chrome">
+            <Footer />
+          </div>
           <AuraBumpToaster />
-        <TanStackDevtools
-          config={{
-            position: 'bottom-right',
-          }}
-          plugins={[
-            {
-              name: 'Tanstack Router',
-              render: <TanStackRouterDevtoolsPanel />,
-            },{
-              name: 'Tanstack Query',
-              render: <ReactQueryDevtoolsPanel />,
-
-            }
-          ]}
-        />
+          <TanStackDevtools
+            config={{ position: 'bottom-right' }}
+            plugins={[
+              { name: 'Tanstack Router', render: <TanStackRouterDevtoolsPanel /> },
+              { name: 'Tanstack Query', render: <ReactQueryDevtoolsPanel /> },
+            ]}
+          />
         </AuraClientProvider>
         <Scripts />
       </body>

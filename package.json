@@ -16,6 +16,7 @@
     "db:migrate": "prisma migrate dev",
     "db:deploy": "prisma migrate deploy",
     "db:studio": "prisma studio",
+    "db:seed": "bun scripts/seed.ts",
     "aura:make": "bun src/aura/cli/make.ts",
     "aura:codegen": "bun src/aura/cli/codegen.ts",
     "aura:doctor": "bun src/aura/cli/doctor.ts",

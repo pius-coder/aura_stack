@@ -46,3 +46,12 @@ export type { AuraSettingsLayoutProps, AuraSettingsNavItem } from "./aura-settin
 
 export { AuraDashboardShell } from "./aura-dashboard-shell";
 export type { AuraDashboardShellProps, AuraDashboardNavItem } from "./aura-dashboard-shell";
+
+export { VibeLayout } from "./vibe-layout";
+export type { VibeLayoutProps } from "./vibe-layout";
+
+export { VibeMark } from "./vibe-mark";
+export type { VibeMarkProps } from "./vibe-mark";
+
+export { VibeWhatsAppMockup } from "./vibe-whatsapp-mockup";
+export type { VibeWhatsAppMockupProps } from "./vibe-whatsapp-mockup";

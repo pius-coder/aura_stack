@@ -53,6 +53,7 @@ model AuraUser {
   sessions           AuraSession[]
   notifications      AuraNotification[]
   auditLogs          AuraAuditLog[]
+  profile            Profile?
 }
 
 model AuraPhoneIdentity {
@@ -315,6 +316,378 @@ model AuraAIUsage {
   @@index([agentName, createdAt])
   @@index([userId, createdAt])
   @@index([threadId, createdAt])
+}
+
+// ── Application: Vibe Platform ──
+
+enum ProfileLanguage {
+  FR
+  EN
+}
+
+enum ProfileStatus {
+  ACTIVE
+  SUSPENDED
+}
+
+enum ServiceAvailability {
+  AVAILABLE
+  BUSY
+  UNAVAILABLE
+}
+
+enum MatchStatus {
+  PENDING
+  ACCEPTED
+  REFUSED
+  CANCELLED
+  EXPIRED
+}
+
+enum ConversationStatus {
+  OPEN
+  CLOSED
+  DISPUTED
+}
+
+enum DisputeStatus {
+  OPEN
+  UNDER_REVIEW
+  RESOLVED
+  DISMISSED
+}
+
+enum DisputeDecision {
+  DISMISS
+  WARN_REPORTER
+  WARN_REPORTED
+  WARN_BOTH
+  SUSPEND_REPORTED
+  SUSPEND_BOTH
+}
+
+enum WhatsappDirection {
+  IN
+  OUT
+}
+
+enum WhatsappOutboxStatus {
+  PENDING
+  SENDING
+  SUCCEEDED
+  FAILED
+}
+
+enum PaymentKind {
+  BADGE
+  BOOST
+  PRO
+  COMMISSION
+}
+
+enum PaymentStatus {
+  PENDING
+  SUCCEEDED
+  FAILED
+  REFUNDED
+}
+
+enum SubscriptionPlan {
+  BASIC
+  PRO
+}
+
+enum SubscriptionStatus {
+  ACTIVE
+  EXPIRED
+  CANCELLED
+}
+
+enum BoostSlotStatus {
+  ACTIVE
+  EXPIRED
+}
+
+enum KnowledgeEntityType {
+  SKILL
+  LOCATION
+  INDUSTRY
+  NEED
+  SERVICE
+  USER
+}
+
+enum KnowledgeRelationPredicate {
+  PROVIDES
+  REQUIRES
+  LOCATED_IN
+  LOOKS_FOR
+  MATCHES
+  CONNECTED_TO
+  RATED
+}
+
+model Profile {
+  id            String          @id @default(cuid())
+  userId        String          @unique
+  displayName   String?
+  bio           String?
+  photoFileId   String?
+  locationLabel String?
+  lat           Float?
+  lng           Float?
+  language      ProfileLanguage @default(FR)
+  isProvider    Boolean         @default(false)
+  isClient      Boolean         @default(false)
+  isVerified    Boolean         @default(false)
+  verifiedAt    DateTime?
+  warningCount  Int             @default(0)
+  status        ProfileStatus   @default(ACTIVE)
+  alias         String          @unique
+  consent       Json?
+  ratingAvg     Float?
+  ratingCount   Int             @default(0)
+  createdAt     DateTime        @default(now())
+  updatedAt     DateTime        @updatedAt
+  user          AuraUser        @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  services      Service[]
+  matchesAsRequester Match[]    @relation("MatchRequester")
+  matchesAsTarget    Match[]    @relation("MatchTarget")
+  ratingsGiven  Rating[]       @relation("RaterProfile")
+  ratingsReceived Rating[]     @relation("RateeProfile")
+  disputes      Dispute[]
+
+  @@index([userId])
+  @@index([status])
+  @@index([alias])
+}
+
+model Service {
+  id           String              @id @default(cuid())
+  userId       String
+  title        String
+  description  String
+  priceXaf     Int
+  availability ServiceAvailability @default(AVAILABLE)
+  zone         String?
+  isActive     Boolean             @default(true)
+  deletedAt    DateTime?
+  createdAt    DateTime            @default(now())
+  updatedAt    DateTime            @updatedAt
+  profile      Profile             @relation(fields: [userId], references: [userId], onDelete: Cascade)
+
+  @@index([userId, isActive])
+  @@index([isActive])
+}
+
+model Match {
+  id              String      @id @default(cuid())
+  requesterId     String
+  targetId        String
+  status          MatchStatus @default(PENDING)
+  originSessionId String?
+  createdAt       DateTime    @default(now())
+  updatedAt       DateTime    @updatedAt
+  requester       Profile     @relation("MatchRequester", fields: [requesterId], references: [userId], onDelete: Cascade)
+  target          Profile     @relation("MatchTarget", fields: [targetId], references: [userId], onDelete: Cascade)
+  conversation    Conversation?
+
+  @@unique([requesterId, targetId, status])
+  @@index([requesterId])
+  @@index([targetId])
+}
+
+model Conversation {
+  id        String             @id @default(cuid())
+  userAId   String
+  userBId   String
+  matchId   String             @unique
+  status    ConversationStatus @default(OPEN)
+  createdAt DateTime           @default(now())
+  updatedAt DateTime           @updatedAt
+  match     Match              @relation(fields: [matchId], references: [id], onDelete: Cascade)
+  messages  ChatMessage[]
+  ratings   Rating[]
+  disputes  Dispute[]
+
+  @@index([userAId])
+  @@index([userBId])
+}
+
+model ChatMessage {
+  id             String       @id @default(cuid())
+  conversationId String
+  senderId       String
+  body           String
+  readBy         Json         @default("[]")
+  createdAt      DateTime     @default(now())
+  conversation   Conversation @relation(fields: [conversationId], references: [id], onDelete: Cascade)
+
+  @@index([conversationId, createdAt])
+}
+
+model Rating {
+  id             String       @id @default(cuid())
+  conversationId String
+  raterId        String
+  rateeId        String
+  score          Int
+  comment        String?
+  createdAt      DateTime     @default(now())
+  conversation   Conversation @relation(fields: [conversationId], references: [id], onDelete: Cascade)
+  rater          Profile      @relation("RaterProfile", fields: [raterId], references: [userId], onDelete: Cascade)
+  ratee          Profile      @relation("RateeProfile", fields: [rateeId], references: [userId], onDelete: Cascade)
+
+  @@unique([conversationId, raterId])
+}
+
+model Dispute {
+  id             String         @id @default(cuid())
+  conversationId String
+  reporterId     String
+  reason         String
+  snapshot       Json
+  status         DisputeStatus  @default(OPEN)
+  decision       DisputeDecision?
+  resolution     String?
+  resolvedById   String?
+  createdAt      DateTime       @default(now())
+  updatedAt      DateTime       @updatedAt
+  conversation   Conversation   @relation(fields: [conversationId], references: [id], onDelete: Cascade)
+  reporter       Profile        @relation(fields: [reporterId], references: [userId], onDelete: Cascade)
+
+  @@index([status])
+  @@index([conversationId])
+}
+
+model KnowledgeEntity {
+  id          String              @id @default(cuid())
+  userId      String
+  type        KnowledgeEntityType
+  value       String
+  confidence  Float               @default(0.5)
+  metadata    Json?
+  embeddingId String?
+  createdAt   DateTime            @default(now())
+  updatedAt   DateTime            @updatedAt
+  relations   KnowledgeRelation[] @relation("SourceEntity")
+  targetOf    KnowledgeRelation[] @relation("TargetEntity")
+  embedding   GraphEmbedding?
+
+  @@index([userId, type])
+  @@index([type, value])
+}
+
+model KnowledgeRelation {
+  id        String                      @id @default(cuid())
+  sourceId  String
+  targetId  String
+  predicate KnowledgeRelationPredicate
+  strength  Float                       @default(0.5)
+  createdAt DateTime                    @default(now())
+  updatedAt DateTime                    @updatedAt
+  source    KnowledgeEntity             @relation("SourceEntity", fields: [sourceId], references: [id], onDelete: Cascade)
+  target    KnowledgeEntity             @relation("TargetEntity", fields: [targetId], references: [id], onDelete: Cascade)
+
+  @@index([sourceId])
+  @@index([targetId])
+  @@index([predicate])
+}
+
+model GraphEmbedding {
+  id        String          @id @default(cuid())
+  entityId  String          @unique
+  // embedding vector(1536) — added via raw SQL migration when pgvector is available
+  metadata  Json?
+  updatedAt DateTime        @updatedAt
+  entity    KnowledgeEntity @relation(fields: [entityId], references: [id], onDelete: Cascade)
+}
+
+model WhatsappInbox {
+  id                String    @id @default(cuid())
+  providerMessageId String    @unique
+  phoneE164         String
+  direction         WhatsappDirection @default(IN)
+  payload           Json
+  processedAt       DateTime?
+  error             String?
+  createdAt         DateTime  @default(now())
+
+  @@index([phoneE164])
+  @@index([processedAt])
+}
+
+model WhatsappOutbox {
+  id             String              @id @default(cuid())
+  idempotencyKey String              @unique
+  phoneE164      String
+  body           String
+  status         WhatsappOutboxStatus @default(PENDING)
+  attempts       Int                 @default(0)
+  nextRunAt      DateTime            @default(now())
+  lockedAt       DateTime?
+  error          String?
+  createdAt      DateTime            @default(now())
+  updatedAt      DateTime            @updatedAt
+
+  @@index([status, nextRunAt])
+}
+
+model MatchSession {
+  id              String   @id @default(cuid())
+  requesterId     String
+  query           String
+  intent          String?
+  candidatesGraph Json?
+  candidatesVector Json?
+  fusedTopN       Json?
+  pickedId        String?
+  latencyMs       Int?
+  createdAt       DateTime @default(now())
+
+  @@index([requesterId])
+}
+
+model Payment {
+  id              String        @id @default(cuid())
+  userId          String
+  provider        String
+  providerTransId String?       @unique
+  kind            PaymentKind
+  amountXaf       Int
+  status          PaymentStatus @default(PENDING)
+  metadata        Json?
+  createdAt       DateTime      @default(now())
+  updatedAt       DateTime      @updatedAt
+
+  @@index([userId])
+  @@index([status])
+}
+
+model Subscription {
+  id        String             @id @default(cuid())
+  userId    String
+  plan      SubscriptionPlan   @default(BASIC)
+  startsAt  DateTime           @default(now())
+  endsAt    DateTime
+  status    SubscriptionStatus @default(ACTIVE)
+  paymentId String?
+  createdAt DateTime           @default(now())
+
+  @@index([userId, status])
+}
+
+model BoostSlot {
+  id        String          @id @default(cuid())
+  userId    String
+  startsAt  DateTime        @default(now())
+  endsAt    DateTime
+  status    BoostSlotStatus @default(ACTIVE)
+  paymentId String?
+  createdAt DateTime        @default(now())
+
+  @@index([userId, status])
 }
 
 // ── Application: Todo ──
