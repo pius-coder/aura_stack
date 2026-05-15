@@ -44,6 +44,10 @@ export const api = {
     "set-language": { _name: "profiles.set-language", _type: "mutate" } as OperationRef<"mutate", InferOperationInput<typeof import("../../operations/profiles/set-language.operation")["default"]>, InferOperationOutput<typeof import("../../operations/profiles/set-language.operation")["default"]>>,
     update: { _name: "profiles.update", _type: "mutate" } as OperationRef<"mutate", InferOperationInput<typeof import("../../operations/profiles/update.operation")["default"]>, InferOperationOutput<typeof import("../../operations/profiles/update.operation")["default"]>>,
   },
+  payments: {
+    "start-checkout": { _name: "payments.start-checkout", _type: "action" } as OperationRef<"action", InferOperationInput<typeof import("../../operations/payments/start-checkout.operation")["default"]>, InferOperationOutput<typeof import("../../operations/payments/start-checkout.operation")["default"]>>,
+    "get-status": { _name: "payments.get-status", _type: "query" } as OperationRef<"query", InferOperationInput<typeof import("../../operations/payments/get-status.operation")["default"]>, InferOperationOutput<typeof import("../../operations/payments/get-status.operation")["default"]>>,
+  },
   todos: {
     "ai-generate": { _name: "todos.ai-generate", _type: "action" } as OperationRef<"action", InferOperationInput<typeof import("../../operations/todos/ai-generate.operation")["default"]>, InferOperationOutput<typeof import("../../operations/todos/ai-generate.operation")["default"]>>,
     toggle: { _name: "todos.toggle", _type: "mutate" } as OperationRef<"mutate", InferOperationInput<typeof import("../../operations/todos/toggle.operation")["default"]>, InferOperationOutput<typeof import("../../operations/todos/toggle.operation")["default"]>>,
