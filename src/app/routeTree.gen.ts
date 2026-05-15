@@ -10,7 +10,6 @@
 
 import { Route as rootRouteImport } from './routes/__root'
 import { Route as TodosRouteImport } from './routes/todos'
-import { Route as SignUpRouteImport } from './routes/sign-up'
 import { Route as SignInRouteImport } from './routes/sign-in'
 import { Route as OnboardingRouteImport } from './routes/onboarding'
 import { Route as DemoRouteImport } from './routes/demo'
@@ -18,8 +17,10 @@ import { Route as AppRouteImport } from './routes/app'
 import { Route as AdminRouteImport } from './routes/admin'
 import { Route as AboutRouteImport } from './routes/about'
 import { Route as IndexRouteImport } from './routes/index'
+import { Route as SignUpIndexRouteImport } from './routes/sign-up/index'
 import { Route as AppIndexRouteImport } from './routes/app/index'
 import { Route as AdminIndexRouteImport } from './routes/admin/index'
+import { Route as SignUpVerifyRouteImport } from './routes/sign-up/verify'
 import { Route as PAliasRouteImport } from './routes/p/$alias'
 import { Route as AppSettingsRouteImport } from './routes/app/settings'
 import { Route as AppMatchesRouteImport } from './routes/app/matches'
@@ -32,11 +33,6 @@ import { Route as AppChatIndexRouteImport } from './routes/app/chat/index'
 const TodosRoute = TodosRouteImport.update({
   id: '/todos',
   path: '/todos',
-  getParentRoute: () => rootRouteImport,
-} as any)
-const SignUpRoute = SignUpRouteImport.update({
-  id: '/sign-up',
-  path: '/sign-up',
   getParentRoute: () => rootRouteImport,
 } as any)
 const SignInRoute = SignInRouteImport.update({
@@ -74,6 +70,11 @@ const IndexRoute = IndexRouteImport.update({
   path: '/',
   getParentRoute: () => rootRouteImport,
 } as any)
+const SignUpIndexRoute = SignUpIndexRouteImport.update({
+  id: '/',
+  path: '/',
+  getParentRoute: () => SignUpRoute,
+} as any)
 const AppIndexRoute = AppIndexRouteImport.update({
   id: '/',
   path: '/',
@@ -83,6 +84,11 @@ const AdminIndexRoute = AdminIndexRouteImport.update({
   id: '/',
   path: '/',
   getParentRoute: () => AdminRoute,
+} as any)
+const SignUpVerifyRoute = SignUpVerifyRouteImport.update({
+  id: '/verify',
+  path: '/verify',
+  getParentRoute: () => SignUpRoute,
 } as any)
 const PAliasRoute = PAliasRouteImport.update({
   id: '/p/$alias',
@@ -133,7 +139,6 @@ export interface FileRoutesByFullPath {
   '/demo': typeof DemoRoute
   '/onboarding': typeof OnboardingRoute
   '/sign-in': typeof SignInRoute
-  '/sign-up': typeof SignUpRoute
   '/todos': typeof TodosRoute
   '/admin/disputes': typeof AdminDisputesRoute
   '/admin/users': typeof AdminUsersRoute
@@ -141,8 +146,10 @@ export interface FileRoutesByFullPath {
   '/app/matches': typeof AppMatchesRoute
   '/app/settings': typeof AppSettingsRoute
   '/p/$alias': typeof PAliasRoute
+  '/sign-up/verify': typeof SignUpVerifyRoute
   '/admin/': typeof AdminIndexRoute
   '/app/': typeof AppIndexRoute
+  '/sign-up/': typeof SignUpIndexRoute
   '/app/chat/': typeof AppChatIndexRoute
   '/app/services/': typeof AppServicesIndexRoute
 }
@@ -152,7 +159,6 @@ export interface FileRoutesByTo {
   '/demo': typeof DemoRoute
   '/onboarding': typeof OnboardingRoute
   '/sign-in': typeof SignInRoute
-  '/sign-up': typeof SignUpRoute
   '/todos': typeof TodosRoute
   '/admin/disputes': typeof AdminDisputesRoute
   '/admin/users': typeof AdminUsersRoute
@@ -160,8 +166,10 @@ export interface FileRoutesByTo {
   '/app/matches': typeof AppMatchesRoute
   '/app/settings': typeof AppSettingsRoute
   '/p/$alias': typeof PAliasRoute
+  '/sign-up/verify': typeof SignUpVerifyRoute
   '/admin': typeof AdminIndexRoute
   '/app': typeof AppIndexRoute
+  '/sign-up': typeof SignUpIndexRoute
   '/app/chat': typeof AppChatIndexRoute
   '/app/services': typeof AppServicesIndexRoute
 }
@@ -174,7 +182,6 @@ export interface FileRoutesById {
   '/demo': typeof DemoRoute
   '/onboarding': typeof OnboardingRoute
   '/sign-in': typeof SignInRoute
-  '/sign-up': typeof SignUpRoute
   '/todos': typeof TodosRoute
   '/admin/disputes': typeof AdminDisputesRoute
   '/admin/users': typeof AdminUsersRoute
@@ -182,8 +189,10 @@ export interface FileRoutesById {
   '/app/matches': typeof AppMatchesRoute
   '/app/settings': typeof AppSettingsRoute
   '/p/$alias': typeof PAliasRoute
+  '/sign-up/verify': typeof SignUpVerifyRoute
   '/admin/': typeof AdminIndexRoute
   '/app/': typeof AppIndexRoute
+  '/sign-up/': typeof SignUpIndexRoute
   '/app/chat/': typeof AppChatIndexRoute
   '/app/services/': typeof AppServicesIndexRoute
 }
@@ -197,7 +206,6 @@ export interface FileRouteTypes {
     | '/demo'
     | '/onboarding'
     | '/sign-in'
-    | '/sign-up'
     | '/todos'
     | '/admin/disputes'
     | '/admin/users'
@@ -205,8 +213,10 @@ export interface FileRouteTypes {
     | '/app/matches'
     | '/app/settings'
     | '/p/$alias'
+    | '/sign-up/verify'
     | '/admin/'
     | '/app/'
+    | '/sign-up/'
     | '/app/chat/'
     | '/app/services/'
   fileRoutesByTo: FileRoutesByTo
@@ -216,7 +226,6 @@ export interface FileRouteTypes {
     | '/demo'
     | '/onboarding'
     | '/sign-in'
-    | '/sign-up'
     | '/todos'
     | '/admin/disputes'
     | '/admin/users'
@@ -224,8 +233,10 @@ export interface FileRouteTypes {
     | '/app/matches'
     | '/app/settings'
     | '/p/$alias'
+    | '/sign-up/verify'
     | '/admin'
     | '/app'
+    | '/sign-up'
     | '/app/chat'
     | '/app/services'
   id:
@@ -237,7 +248,6 @@ export interface FileRouteTypes {
     | '/demo'
     | '/onboarding'
     | '/sign-in'
-    | '/sign-up'
     | '/todos'
     | '/admin/disputes'
     | '/admin/users'
@@ -245,8 +255,10 @@ export interface FileRouteTypes {
     | '/app/matches'
     | '/app/settings'
     | '/p/$alias'
+    | '/sign-up/verify'
     | '/admin/'
     | '/app/'
+    | '/sign-up/'
     | '/app/chat/'
     | '/app/services/'
   fileRoutesById: FileRoutesById
@@ -259,7 +271,6 @@ export interface RootRouteChildren {
   DemoRoute: typeof DemoRoute
   OnboardingRoute: typeof OnboardingRoute
   SignInRoute: typeof SignInRoute
-  SignUpRoute: typeof SignUpRoute
   TodosRoute: typeof TodosRoute
   PAliasRoute: typeof PAliasRoute
 }
@@ -271,13 +282,6 @@ declare module '@tanstack/react-router' {
       path: '/todos'
       fullPath: '/todos'
       preLoaderRoute: typeof TodosRouteImport
-      parentRoute: typeof rootRouteImport
-    }
-    '/sign-up': {
-      id: '/sign-up'
-      path: '/sign-up'
-      fullPath: '/sign-up'
-      preLoaderRoute: typeof SignUpRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/sign-in': {
@@ -329,6 +333,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof IndexRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/sign-up/': {
+      id: '/sign-up/'
+      path: '/'
+      fullPath: '/sign-up/'
+      preLoaderRoute: typeof SignUpIndexRouteImport
+      parentRoute: typeof SignUpRoute
+    }
     '/app/': {
       id: '/app/'
       path: '/'
@@ -342,6 +353,13 @@ declare module '@tanstack/react-router' {
       fullPath: '/admin/'
       preLoaderRoute: typeof AdminIndexRouteImport
       parentRoute: typeof AdminRoute
+    }
+    '/sign-up/verify': {
+      id: '/sign-up/verify'
+      path: '/verify'
+      fullPath: '/sign-up/verify'
+      preLoaderRoute: typeof SignUpVerifyRouteImport
+      parentRoute: typeof SignUpRoute
     }
     '/p/$alias': {
       id: '/p/$alias'
@@ -444,7 +462,6 @@ const rootRouteChildren: RootRouteChildren = {
   DemoRoute: DemoRoute,
   OnboardingRoute: OnboardingRoute,
   SignInRoute: SignInRoute,
-  SignUpRoute: SignUpRoute,
   TodosRoute: TodosRoute,
   PAliasRoute: PAliasRoute,
 }
