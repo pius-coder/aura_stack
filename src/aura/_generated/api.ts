@@ -17,6 +17,7 @@ export const api = {
   },
   services: {
     toggle: { _name: "services.toggle", _type: "mutate" } as OperationRef<"mutate", InferOperationInput<typeof import("../../operations/services/toggle.operation")["default"]>, InferOperationOutput<typeof import("../../operations/services/toggle.operation")["default"]>>,
+    "list-public": { _name: "services.list-public", _type: "query" } as OperationRef<"query", InferOperationInput<typeof import("../../operations/services/list-public.operation")["default"]>, InferOperationOutput<typeof import("../../operations/services/list-public.operation")["default"]>>,
     create: { _name: "services.create", _type: "mutate" } as OperationRef<"mutate", InferOperationInput<typeof import("../../operations/services/create.operation")["default"]>, InferOperationOutput<typeof import("../../operations/services/create.operation")["default"]>>,
     delete: { _name: "services.delete", _type: "mutate" } as OperationRef<"mutate", InferOperationInput<typeof import("../../operations/services/delete.operation")["default"]>, InferOperationOutput<typeof import("../../operations/services/delete.operation")["default"]>>,
     update: { _name: "services.update", _type: "mutate" } as OperationRef<"mutate", InferOperationInput<typeof import("../../operations/services/update.operation")["default"]>, InferOperationOutput<typeof import("../../operations/services/update.operation")["default"]>>,
@@ -27,6 +28,8 @@ export const api = {
     accept: { _name: "matches.accept", _type: "mutate" } as OperationRef<"mutate", InferOperationInput<typeof import("../../operations/matches/accept.operation")["default"]>, InferOperationOutput<typeof import("../../operations/matches/accept.operation")["default"]>>,
     "list-incoming": { _name: "matches.list-incoming", _type: "query" } as OperationRef<"query", InferOperationInput<typeof import("../../operations/matches/list-incoming.operation")["default"]>, InferOperationOutput<typeof import("../../operations/matches/list-incoming.operation")["default"]>>,
     create: { _name: "matches.create", _type: "mutate" } as OperationRef<"mutate", InferOperationInput<typeof import("../../operations/matches/create.operation")["default"]>, InferOperationOutput<typeof import("../../operations/matches/create.operation")["default"]>>,
+    "list-outgoing": { _name: "matches.list-outgoing", _type: "query" } as OperationRef<"query", InferOperationInput<typeof import("../../operations/matches/list-outgoing.operation")["default"]>, InferOperationOutput<typeof import("../../operations/matches/list-outgoing.operation")["default"]>>,
+    cancel: { _name: "matches.cancel", _type: "mutate" } as OperationRef<"mutate", InferOperationInput<typeof import("../../operations/matches/cancel.operation")["default"]>, InferOperationOutput<typeof import("../../operations/matches/cancel.operation")["default"]>>,
   },
   agent: {
     "process-incoming": { _name: "agent.process-incoming", _type: "action" } as OperationRef<"action", InferOperationInput<typeof import("../../operations/agent/process-incoming.operation")["default"]>, InferOperationOutput<typeof import("../../operations/agent/process-incoming.operation")["default"]>>,
@@ -36,6 +39,9 @@ export const api = {
   },
   matching: {
     run: { _name: "matching.run", _type: "action" } as OperationRef<"action", InferOperationInput<typeof import("../../operations/matching/run.operation")["default"]>, InferOperationOutput<typeof import("../../operations/matching/run.operation")["default"]>>,
+  },
+  embeddings: {
+    regenerate: { _name: "embeddings.regenerate", _type: "action" } as OperationRef<"action", InferOperationInput<typeof import("../../operations/embeddings/regenerate.operation")["default"]>, InferOperationOutput<typeof import("../../operations/embeddings/regenerate.operation")["default"]>>,
   },
   profiles: {
     "set-consent": { _name: "profiles.set-consent", _type: "mutate" } as OperationRef<"mutate", InferOperationInput<typeof import("../../operations/profiles/set-consent.operation")["default"]>, InferOperationOutput<typeof import("../../operations/profiles/set-consent.operation")["default"]>>,
@@ -66,9 +72,11 @@ export const api = {
     "list-messages": { _name: "chat.list-messages", _type: "query" } as OperationRef<"query", InferOperationInput<typeof import("../../operations/chat/list-messages.operation")["default"]>, InferOperationOutput<typeof import("../../operations/chat/list-messages.operation")["default"]>>,
     "list-conversations": { _name: "chat.list-conversations", _type: "query" } as OperationRef<"query", InferOperationInput<typeof import("../../operations/chat/list-conversations.operation")["default"]>, InferOperationOutput<typeof import("../../operations/chat/list-conversations.operation")["default"]>>,
     "send-message": { _name: "chat.send-message", _type: "mutate" } as OperationRef<"mutate", InferOperationInput<typeof import("../../operations/chat/send-message.operation")["default"]>, InferOperationOutput<typeof import("../../operations/chat/send-message.operation")["default"]>>,
+    "mark-read": { _name: "chat.mark-read", _type: "mutate" } as OperationRef<"mutate", InferOperationInput<typeof import("../../operations/chat/mark-read.operation")["default"]>, InferOperationOutput<typeof import("../../operations/chat/mark-read.operation")["default"]>>,
   },
   ratings: {
     create: { _name: "ratings.create", _type: "mutate" } as OperationRef<"mutate", InferOperationInput<typeof import("../../operations/ratings/create.operation")["default"]>, InferOperationOutput<typeof import("../../operations/ratings/create.operation")["default"]>>,
+    "list-for-user": { _name: "ratings.list-for-user", _type: "query" } as OperationRef<"query", InferOperationInput<typeof import("../../operations/ratings/list-for-user.operation")["default"]>, InferOperationOutput<typeof import("../../operations/ratings/list-for-user.operation")["default"]>>,
   },
   disputes: {
     create: { _name: "disputes.create", _type: "mutate" } as OperationRef<"mutate", InferOperationInput<typeof import("../../operations/disputes/create.operation")["default"]>, InferOperationOutput<typeof import("../../operations/disputes/create.operation")["default"]>>,
