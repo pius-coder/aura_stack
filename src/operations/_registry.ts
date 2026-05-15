@@ -11,3 +11,15 @@ export { default as auth_startPhoneOtp } from "./auth/start-phone-otp.operation"
 export { default as auth_verifyPhoneOtp } from "./auth/verify-phone-otp.operation";
 export { default as auth_vibeMe } from "./auth/vibe-me.operation";
 export { default as auth_vibeLogout } from "./auth/vibe-logout.operation";
+export { default as webhooks_whatsapp } from './webhooks/whatsapp.http';
+export { default as whatsapp_processOutbox } from './whatsapp/process-outbox.cron';
+export { default as services_listMine } from "./services/list-mine.operation";
+export { default as services_create } from "./services/create.operation";
+export { default as services_update } from "./services/update.operation";
+export { default as services_toggle } from "./services/toggle.operation";
+export { default as services_delete } from "./services/delete.operation";
+export { default as profiles_getByAlias } from "./profiles/get-by-alias.operation";
+export { default as profiles_get } from "./profiles/get.operation";
+export { default as profiles_update } from "./profiles/update.operation";
+export { default as profiles_setLanguage } from "./profiles/set-language.operation";
+export { default as profiles_setConsent } from "./profiles/set-consent.operation";
