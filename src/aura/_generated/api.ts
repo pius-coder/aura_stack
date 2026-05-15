@@ -13,6 +13,8 @@ export const api = {
     "start-phone-otp": { _name: "auth.start-phone-otp", _type: "mutate" } as OperationRef<"mutate", InferOperationInput<typeof import("../../operations/auth/start-phone-otp.operation")["default"]>, InferOperationOutput<typeof import("../../operations/auth/start-phone-otp.operation")["default"]>>,
     "verify-phone-otp": { _name: "auth.verify-phone-otp", _type: "mutate" } as OperationRef<"mutate", InferOperationInput<typeof import("../../operations/auth/verify-phone-otp.operation")["default"]>, InferOperationOutput<typeof import("../../operations/auth/verify-phone-otp.operation")["default"]>>,
     "vibe-logout": { _name: "auth.vibe-logout", _type: "mutate" } as OperationRef<"mutate", InferOperationInput<typeof import("../../operations/auth/vibe-logout.operation")["default"]>, InferOperationOutput<typeof import("../../operations/auth/vibe-logout.operation")["default"]>>,
+    "set-password": { _name: "auth.set-password", _type: "mutate" } as OperationRef<"mutate", InferOperationInput<typeof import("../../operations/auth/set-password.operation")["default"]>, InferOperationOutput<typeof import("../../operations/auth/set-password.operation")["default"]>>,
+    login: { _name: "auth.login", _type: "mutate" } as OperationRef<"mutate", InferOperationInput<typeof import("../../operations/auth/login.operation")["default"]>, InferOperationOutput<typeof import("../../operations/auth/login.operation")["default"]>>,
     "vibe-me": { _name: "auth.vibe-me", _type: "query" } as OperationRef<"query", InferOperationInput<typeof import("../../operations/auth/vibe-me.operation")["default"]>, InferOperationOutput<typeof import("../../operations/auth/vibe-me.operation")["default"]>>,
   },
   services: {

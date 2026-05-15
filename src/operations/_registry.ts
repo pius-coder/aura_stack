@@ -11,6 +11,8 @@ export { default as auth_startPhoneOtp } from "./auth/start-phone-otp.operation"
 export { default as auth_verifyPhoneOtp } from "./auth/verify-phone-otp.operation";
 export { default as auth_vibeMe } from "./auth/vibe-me.operation";
 export { default as auth_vibeLogout } from "./auth/vibe-logout.operation";
+export { default as auth_setPassword } from "./auth/set-password.operation";
+export { default as auth_login } from "./auth/login.operation";
 export { default as webhooks_whatsapp } from './webhooks/whatsapp.http';
 export { default as whatsapp_processOutbox } from './whatsapp/process-outbox.cron';
 export { default as services_listMine } from "./services/list-mine.operation";
