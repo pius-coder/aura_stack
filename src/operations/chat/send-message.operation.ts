@@ -1,6 +1,7 @@
 import { defineOperationFn } from "@/aura/server/operation";
 import { z } from "zod";
 import { AuraError } from "@/aura/core/errors";
+import { notifyNewMessage } from "@/lib/notifications/send";
 
 export default defineOperationFn("chat.send-message")
   .mutate()
@@ -12,7 +13,11 @@ export default defineOperationFn("chat.send-message")
     if (!conv) throw new AuraError("NOT_FOUND", "Conversation introuvable.");
     if (conv.userAId !== ctx.user.id && conv.userBId !== ctx.user.id) throw new AuraError("FORBIDDEN", "Accès refusé.");
     if (conv.status !== "OPEN") throw new AuraError("BAD_REQUEST", "Conversation fermée.");
-    return ctx.db.chatMessage.create({
+    const msg = await ctx.db.chatMessage.create({
       data: { conversationId: input.conversationId, senderId: ctx.user.id, body: input.body },
     });
+
+    const recipientId = conv.userAId === ctx.user.id ? conv.userBId : conv.userAId;
+    await notifyNewMessage(recipientId, input.conversationId).catch(() => {});
+    return msg;
   });

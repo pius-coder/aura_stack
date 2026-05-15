@@ -1,6 +1,7 @@
 import { defineOperationFn } from "@/aura/server/operation";
 import { z } from "zod";
 import { AuraError } from "@/aura/core/errors";
+import { notifyMatchRequest } from "@/lib/notifications/send";
 
 export default defineOperationFn("matches.create")
   .mutate()
@@ -13,7 +14,9 @@ export default defineOperationFn("matches.create")
       where: { requesterId: ctx.user.id, targetId: input.targetUserId, status: { in: ["PENDING", "ACCEPTED"] } },
     });
     if (existing) throw new AuraError("BAD_REQUEST", "Une demande existe déjà.");
-    return ctx.db.match.create({
+    const match = await ctx.db.match.create({
       data: { requesterId: ctx.user.id, targetId: input.targetUserId, originSessionId: input.originSessionId },
     });
+    await notifyMatchRequest(ctx.user.id, input.targetUserId).catch(() => {});
+    return match;
   });

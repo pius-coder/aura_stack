@@ -46,6 +46,8 @@ model AuraUser {
   displayName String?
   isAdmin     Boolean @default(false)
   isBlocked   Boolean @default(false)
+  whatsappLinked Boolean @default(false)
+  whatsappE164   String?
 
   // Aura relations
   phoneIdentities    AuraPhoneIdentity[]
@@ -64,12 +66,15 @@ model AuraPhoneIdentity {
   phoneE164          String    @unique
   verifiedAt         DateTime?
   whatsappVerifiedAt DateTime?
+  linkCode           String?
+  linkCodeExpiresAt  DateTime?
   createdAt          DateTime  @default(now())
   updatedAt          DateTime  @updatedAt
   user               AuraUser  @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@index([userId])
   @@index([phoneE164])
+  @@index([linkCode])
 }
 
 model AuraPasswordCredential {

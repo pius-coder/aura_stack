@@ -6,6 +6,8 @@ import { resolveUserByPhone } from "@/lib/whatsapp/resolve-user";
 import { whatsAppGateway } from "@/lib/whatsapp";
 import whatsappBotAgent from "@/operations/agents/whatsapp-bot.agent";
 
+const LINK_CODE_RE = /^[A-Z0-9]{8}$/;
+
 export default defineOperationFn("agent.process-incoming")
   .action()
   .input(z.object({ whatsappInboxId: z.string() }))
@@ -18,9 +20,40 @@ export default defineOperationFn("agent.process-incoming")
     const gateway = whatsAppGateway();
 
     if (!userId) {
-      await gateway.sendText(inbox.phoneE164, "Bienvenue ! Pour utiliser Vibe, inscrivez-vous sur la plateforme.", `onboard-${inbox.id}`);
+      await gateway.sendText(inbox.phoneE164, "Bienvenue ! Pour utiliser Orya, inscrivez-vous sur la plateforme.", `onboard-${inbox.id}`);
       await ctx.db.whatsappInbox.update({ where: { id: inbox.id }, data: { processedAt: new Date() } });
       return { onboarding: true };
+    }
+
+    const user = await ctx.db.auraUser.findUnique({ where: { id: userId }, select: { whatsappLinked: true } });
+
+    const payload = inbox.payload as Record<string, any>;
+    const messageText = payload?.data?.message?.conversation || payload?.data?.message?.extendedTextMessage?.text || "";
+    if (!messageText.trim()) {
+      await ctx.db.whatsappInbox.update({ where: { id: inbox.id }, data: { processedAt: new Date() } });
+      return { empty: true };
+    }
+
+    // Handle link code message
+    const trimmed = messageText.trim();
+    if (LINK_CODE_RE.test(trimmed)) {
+      const op = await ctx.call({ fn: "auth.link-whatsapp" as any, input: { phoneE164: inbox.phoneE164, linkCode: trimmed } }) as any;
+      if (op.ok) {
+        await gateway.sendText(inbox.phoneE164, "Votre compte est desormais lie. Bienvenue sur Orya !", `linked-${inbox.id}`);
+      } else if (op.reason === "CODE_EXPIRED") {
+        await gateway.sendText(inbox.phoneE164, "Ce code a expire. Generez-en un nouveau depuis votre tableau de bord.", `expired-${inbox.id}`);
+      } else {
+        await gateway.sendText(inbox.phoneE164, "Ce code est invalide. Veuillez verifier et reessayer.", `invalid-${inbox.id}`);
+      }
+      await ctx.db.whatsappInbox.update({ where: { id: inbox.id }, data: { processedAt: new Date() } });
+      return { linkCodeProcessed: true };
+    }
+
+    // Block non-linked users from using the bot
+    if (!user?.whatsappLinked) {
+      await gateway.sendText(inbox.phoneE164, "Veuillez lier votre compte en envoyant le code affiche sur votre tableau de bord.", `unlinked-${inbox.id}`);
+      await ctx.db.whatsappInbox.update({ where: { id: inbox.id }, data: { processedAt: new Date() } });
+      return { unlinked: true };
     }
 
     const userCtx = await hydrateUserContext(userId);
@@ -28,13 +61,6 @@ export default defineOperationFn("agent.process-incoming")
       await gateway.sendText(inbox.phoneE164, "Votre compte est suspendu.", `suspended-${inbox.id}`);
       await ctx.db.whatsappInbox.update({ where: { id: inbox.id }, data: { processedAt: new Date() } });
       return { suspended: true };
-    }
-
-    const payload = inbox.payload as Record<string, any>;
-    const messageText = payload?.data?.message?.conversation || payload?.data?.message?.extendedTextMessage?.text || "";
-    if (!messageText.trim()) {
-      await ctx.db.whatsappInbox.update({ where: { id: inbox.id }, data: { processedAt: new Date() } });
-      return { empty: true };
     }
 
     try {

@@ -54,9 +54,13 @@ export default defineOperationFn("auth.verify-phone-otp")
         include: { user: true },
       });
 
+      await ctx.db.auraUser.update({
+        where: { id: user.id },
+        data: { whatsappLinked: true, whatsappE164: result.phoneE164 },
+      });
+
       // Create minimal profile with alias
       let alias = generateAlias();
-      // Ensure uniqueness (retry up to 5 times)
       for (let i = 0; i < 5; i++) {
         const exists = await ctx.db.profile.findUnique({ where: { alias } });
         if (!exists) break;
@@ -67,11 +71,16 @@ export default defineOperationFn("auth.verify-phone-otp")
       });
       isNewUser = true;
     } else {
-      // Update verification timestamps
       if (!phoneIdentity.verifiedAt || !phoneIdentity.whatsappVerifiedAt) {
         await ctx.db.auraPhoneIdentity.update({
           where: { id: phoneIdentity.id },
           data: { verifiedAt: new Date(), whatsappVerifiedAt: new Date() },
+        });
+      }
+      if (!phoneIdentity.user.whatsappLinked) {
+        await ctx.db.auraUser.update({
+          where: { id: phoneIdentity.userId },
+          data: { whatsappLinked: true, whatsappE164: result.phoneE164 },
         });
       }
     }
