@@ -204,15 +204,69 @@ Les actions ont un DB Proxy tombstoné : `ctx.db` throw sur toute tentative d'ac
 
 ---
 
-## 8. ERREURS À NE PAS RÉPÉTER
+## 8. ERREURS À NE PAS RÉPÉTER (AMÉLIORÉ)
 
-1. **Ne pas présumer qu'une feature n'existe pas** sans vérifier le code
-2. **Utiliser `@/operations/_services/`** pas `@/_services/`
-3. **Utiliser `defineNotificationFn`** pas de helpers manuels
-4. **Ne pas mettre `ctx.db` dans une action** — utiliser `.mutate()` ou `ctx.runMutation()`
-5. **Relire les fichiers après les avoir créés/modifiés**
-6. **Pipeline** : toujours specs → code → doc → tests → implé → relecture → tests → commit
-7. **Imports** : `@/operations/_services/mon-service` pour les services depuis les operations
-8. **Imports dans _registry.ts** : les notifications ont besoin de side-effect imports
-9. **Tests de notification** : importer les fichiers de notification dans le test pour les enregistrer
-10. **Ne pas ignorer le flux batch de WhatsApp** — pas 1 msg = 1 réponse
+### 🔴 Erreurs d'analyse (les pires)
+
+1. **Ne JAMAIS dire qu'une feature n'existe pas sans vérifier le code.**
+   - J'ai dit que `AuraStoredFile`, `ctx.invalidate`, `api.ts`, `defineSearchIndex`, `defineVectorIndex`, `defineComponent`, `ctx.scheduler`, `ctx.storage.store/getUrl` n'existaient PAS.
+   - **Tout existait déjà.** L'utilisateur m'a corrigé.
+   - ✅ **Correction :** `grep` ou `read` les fichiers avant d'affirmer quoi que ce soit.
+
+2. **Ne JAMAIS faire une analyse biaisée.**
+   - J'ai dit R4, R17, R18, R22, R23, R24, R26, R27, R28 étaient "pas implémentés".
+   - **Tout était implémenté.** J'ai dû réécrire l'analyse entière.
+   - ✅ **Correction :** Vérifier CHAQUE requirement un par un avec le code sous les yeux.
+
+### 🔴 Erreurs de code
+
+3. **Import `@/_services/` ne fonctionne PAS.**
+   - J'ai écrit `import { PaymentService } from "@/_services/payment-service"`
+   - ✅ **Correction :** `import { PaymentService } from "@/operations/_services/payment-service"`
+
+4. **Ne PAS créer de helpers manuels pour les notifications.**
+   - J'ai créé `src/lib/notifications/send.ts` avec des fonctions manuelles.
+   - L'utilisateur a dit "j'aime pas" et m'a forcé à utiliser `defineNotificationFn`.
+   - ✅ **Correction :** `defineNotificationFn("name").payload(z).handler(fn)` + `ctx.notify.via("name").send(payload)`
+
+5. **Ne PAS mettre `ctx.db.*` dans une `.action()`.**
+   - 3 opérations crashent à cause du DB Proxy tombstoné.
+   - ✅ **Correction :** Soit `.mutate()` + service, soit `ctx.runQuery/runMutation()` depuis l'action.
+
+6. **Ne PAS laisser `throw new Error("message")` dans un handler.**
+   - Ça donne un 500 sans message clair pour le client.
+   - ✅ **Correction :** Toujours `throw new AuraError("CODE", "message")`.
+
+7. **Les notifications ont besoin de side-effect imports dans `_registry.ts`.**
+   - Sans ça, elles ne sont jamais enregistrées et `hasNotification()` retourne false.
+   - ✅ **Correction :** Ajouter `import "./notifications/mon-fichier.notification"` dans `_registry.ts`.
+
+8. **Les tests de notification doivent importer les fichiers `.notification.ts`.**
+   - ✅ **Correction :** Mettre les imports en haut du fichier test.
+
+### 🟡 Erreurs de workflow
+
+9. **Ne PAS skip la relecture des fichiers créés/modifiés.**
+   - ✅ **Correction :** Lire chaque fichier après l'avoir écrit/modifié.
+
+10. **Ne PAS ignorer le pipeline : specs → design → implémentation.**
+    - L'utilisateur insiste : requirements d'abord, design ensuite, tâches enfin.
+    - ✅ **Correction :** Lire `.kiro/specs/.../requirements.md` puis `design.md` avant d'écrire une ligne.
+
+11. **Ne PAS ignorer les docs Aura.**
+    - L'utilisateur m'a envoyé lire `docs/` après que j'ai fait n'importe quoi.
+    - ✅ **Correction :** Lire `docs/<sujet>.md` AVANT d'implémenter une feature.
+
+12. **Ne PAS proposer des palettes CSS au hasard.**
+    - J'ai changé la palette 8 fois sans demander ce qu'il voulait.
+    - ✅ **Correction :** Demander le style/ambiance avant de modifier.
+
+### 🟡 Erreurs UI/design
+
+13. **Le widget dev/chat doit avoir une SIDEBAR avec contacts, pas des tabs.**
+    - J'ai fait un sélecteur + tabs, l'utilisateur voulait une sidebar WhatsApp Web.
+    - ✅ **Correction :** Sidebar contacts à gauche + chat panel à droite.
+
+14. **WhatsApp fonctionne en BATCH, pas en 1 msg = 1 réponse.**
+    - Le webhook reçoit plusieurs messages à la fois.
+    - ✅ **Correction :** Tenir compte du flux batch dans le traitement.
