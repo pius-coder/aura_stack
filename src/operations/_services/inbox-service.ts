@@ -1,6 +1,7 @@
 import { AuraService } from "@/aura/server/service";
 import { resolveUserByPhone } from "@/lib/whatsapp/resolve-user";
 import { whatsAppGateway } from "@/lib/whatsapp";
+import { UserAgentService } from "./user-agent-service";
 
 const LINK_CODE_RE = /^[A-Z0-9]{8}$/;
 
@@ -114,18 +115,10 @@ export class InboxService extends AuraService {
 
   private async generateReply(userId: string, text: string) {
     try {
-      const { default: whatsappBotAgent } = await import("@/operations/agents/whatsapp-bot.agent");
-      const thread = await this.agent.createThread(whatsappBotAgent, { userId });
-      const response = await this.agent.generateText(thread, { prompt: text });
-      const { checkPersonaCompliance, FALLBACK_RESPONSE } = await import("@/operations/agent/nodes/response");
-      if (!checkPersonaCompliance(response.content)) {
-        const retry = await this.agent.generateText(thread, { prompt: "Reformulez en vouvoyant strictement." });
-        return checkPersonaCompliance(retry.content) ? retry.content : FALLBACK_RESPONSE;
-      }
-      return response.content;
+      const agentSvc = new UserAgentService(this.ctx);
+      return await agentSvc.processMessage(userId, text);
     } catch {
-      const { FALLBACK_RESPONSE } = await import("@/operations/agent/nodes/response");
-      return FALLBACK_RESPONSE;
+      return "Je vous prie de m'excuser, je rencontre une difficulté technique. Veuillez réessayer dans un instant.";
     }
   }
 }
