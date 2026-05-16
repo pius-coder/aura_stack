@@ -161,6 +161,14 @@ Review ALL created/modified files against specs and docs.
 - docs/folder-conventions.md
 - docs/ai-agents.md
 - docs/realtime.md
+- docs/workflows.md
+- docs/http-actions.md
+- docs/scheduler-cron.md
+- docs/pagination-search.md
+- docs/ui-kit.md
+- docs/context.md
+- docs/architecture.md
+- docs/security.md
 - MEMO.md (errors to avoid)
 - AGENTS.md (principes)
 
@@ -170,6 +178,9 @@ Review ALL created/modified files against specs and docs.
 - src/aura/core/errors.ts
 - src/aura/server/rate-limit.ts
 - src/aura/server/scheduler.ts
+- src/aura/server/notifications.ts
+- src/aura/server/broadcast.ts
+- src/aura/server/invalidate.ts
 
 ## Files to review:
 - <full paths>
