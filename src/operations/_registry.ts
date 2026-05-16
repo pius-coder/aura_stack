@@ -51,3 +51,7 @@ export { default as matches_cancel } from "./matches/cancel.operation";
 export { default as chat_markRead } from "./chat/mark-read.operation";
 export { default as ratings_listForUser } from "./ratings/list-for-user.operation";
 export { default as embeddings_regenerate } from "./embeddings/regenerate.operation";
+// Notifications — side-effect imports for self-registration
+import "./notifications/match-request.notification";
+import "./notifications/match-accepted.notification";
+import "./notifications/match-refused.notification";
