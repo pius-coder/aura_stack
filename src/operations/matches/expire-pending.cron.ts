@@ -1,11 +1,11 @@
 import { defineOperationFn } from "@/aura/server/operation";
 import { MatchService } from "@/operations/_services/match-service";
 
-export default defineOperationFn("matches.list-outgoing")
-  .query()
+export default defineOperationFn("matches.expire-pending")
+  .mutate()
   .entities(["Match"])
-  .auth()
+  .internal()
   .handler(async ({ ctx }) => {
     const svc = new MatchService(ctx);
-    return svc.listOutgoing(ctx.user.id);
+    return svc.expirePending();
   });
