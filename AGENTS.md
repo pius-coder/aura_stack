@@ -146,4 +146,49 @@ export class MonService extends AuraService {
 ```
 10. **Re-run review agent after fixes until zero issues** — après chaque série de correctifs, relancer l'agent de review. Tant qu'il reste des issues, corriger et re-relancer. Ne commiter qu'après un rapport "ALL CLEAR — zero issues".
 11. **Tests** — tests unitaires pour les services, tests d'intégration pour les operations, property-based tests pour les algorithmes (RRF, traversal, round-trip).
+12. **Review agent prompt template** — utiliser ce prompt pour vérifier le code contre les specs avant chaque commit :
+```
+Review ALL created/modified files against specs and docs.
+
+## Specs references:
+- R<n>: .kiro/specs/whatsapp-ai-matchmaking-platform/requirements.md lignes <xxx-yyy>
+- Design couche <n>: .kiro/specs/whatsapp-ai-matchmaking-platform/design.md lignes <xxx-yyy>
+
+## Docs:
+- docs/operations.md (thin handlers, service layer)
+- docs/auth.md (OTP, sessions)
+- docs/storage.md (store/getUrl)
+- docs/folder-conventions.md
+- docs/ai-agents.md
+- docs/realtime.md
+- MEMO.md (errors to avoid)
+- AGENTS.md (principes)
+
+## Framework implementations:
+- src/aura/server/service.ts
+- src/aura/server/storage/types.ts
+- src/aura/core/errors.ts
+- src/aura/server/rate-limit.ts
+- src/aura/server/scheduler.ts
+
+## Files to review:
+- <full paths>
+
+## Checklist per file:
+1. No as any casts
+2. AuraError > Error for business errors
+3. AuraService pattern — services extends AuraService, operations thin handlers (`new Service(ctx).method(args)`)
+4. Import paths use @/operations/_services/name (not @/_services/)
+5. No manual ctx.invalidate() in services (`.entities()` handles it)
+6. storage.store takes single AuraStoreArgs `{data, filename, contentType}`, returns `{storageId,...}`
+7. storage.getUrl returns Promise<string> (must await)
+8. All operations registered in _registry.ts
+9. Follows design.md naming (Inventaire des operations Aura section)
+10. Requirements compliance (acceptance criteria)
+11. ctx.notify.via() uses .catch(() => {}) fire-and-forget
+12. R1-R5 / R6/R24/R25 / R11-R16 / R26-R27 compliance as applicable
+13. No throw new Error(...) without AuraError
+
+Report ALL issues with full path and line numbers. After fixes, re-run until "ALL CLEAR — zero issues".
+```
 <!-- intent-skills:end -->
