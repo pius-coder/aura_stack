@@ -1,7 +1,6 @@
 import { defineOperationFn } from "@/aura/server/operation";
 import { z } from "zod";
 import { AuraError } from "@/aura/core/errors";
-import { notifyMatchRefused } from "@/lib/notifications/send";
 
 export default defineOperationFn("matches.refuse")
   .mutate()
@@ -17,7 +16,7 @@ export default defineOperationFn("matches.refuse")
     const requester = await ctx.db.auraUser.findUnique({ where: { id: match.requesterId }, select: { whatsappE164: true, profile: { select: { language: true } } } });
     if (requester?.whatsappE164) {
       const lang = requester.profile?.language ?? "FR";
-      await notifyMatchRefused(match.requesterId, requester.whatsappE164, lang).catch(() => {});
+      ctx.notify.via("match-refused").send({ phoneE164: requester.whatsappE164, language: lang }).catch(() => {});
     }
 
     return { ok: true };

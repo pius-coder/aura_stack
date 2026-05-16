@@ -1,7 +1,6 @@
 import { defineOperationFn } from "@/aura/server/operation";
 import { z } from "zod";
 import { AuraError } from "@/aura/core/errors";
-import { notifyMatchRequest } from "@/lib/notifications/send";
 
 export default defineOperationFn("matches.create")
   .mutate()
@@ -17,6 +16,10 @@ export default defineOperationFn("matches.create")
     const match = await ctx.db.match.create({
       data: { requesterId: ctx.user.id, targetId: input.targetUserId, originSessionId: input.originSessionId },
     });
-    await notifyMatchRequest(ctx.user.id, input.targetUserId).catch(() => {});
+    const target = await ctx.db.auraUser.findUnique({ where: { id: input.targetUserId }, select: { whatsappE164: true, profile: { select: { language: true } } } });
+    if (target?.whatsappE164) {
+      const lang = target.profile?.language ?? "FR";
+      ctx.notify.via("match-request").send({ phoneE164: target.whatsappE164, language: lang }).catch(() => {});
+    }
     return match;
   });

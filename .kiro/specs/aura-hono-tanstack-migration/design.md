@@ -1590,3 +1590,121 @@ test("bridge POST returns envelope", async () => {
 ```
 
 This validates the Hono layer in isolation. Integration tests with TanStack Start use Playwright for full SSR + hydration round-trips.
+
+---
+
+## Decision 26: AuraService — OOP Business Logic Layer
+
+**Resolves:** Requirement 40
+
+### Problem
+
+Operation handlers mix validation (Zod), business logic, DB access, and side effects. `.action()` handlers crash when they touch `ctx.db.*` (tombstoned Proxy). `operationAsTool` creates a fresh context losing session/user. Business logic is not reusable or testable without mounting the full Aura context.
+
+### Design
+
+A base class `AuraService` that receives `AuraContext` once at construction and exposes every Aura capability through `this.*`:
+
+```typescript
+// src/aura/server/service.ts
+import type { AuraContext } from "./context";
+
+export class AuraService {
+  constructor(protected ctx: AuraContext) {}
+
+  get db() { return this.ctx.db; }
+  get user() { return this.ctx.user; }
+  get session() { return this.ctx.session; }
+  get agent() { return this.ctx.agent; }
+  get scheduler() { return this.ctx.scheduler; }
+  get storage() { return this.ctx.storage; }
+  get log() { return this.ctx.log; }
+  get audit() { return this.ctx.audit; }
+  get notify() { return this.ctx.notify; }
+  get bump() { return this.ctx.bump; }
+
+  runQuery(ref: any, input: any) { return this.ctx.runQuery(ref, input); }
+  runMutation(ref: any, input: any) { return this.ctx.runMutation(ref, input); }
+  runAction(ref: any, input: any) { return this.ctx.runAction(ref, input); }
+  invalidate(target: { entity: string; id?: string }) { this.ctx.invalidate(target); }
+  paginate(model: any, opts: any) { return this.ctx.paginate(model, opts); }
+}
+```
+
+### Usage pattern
+
+```typescript
+// — Operation (thin transport layer) —
+defineOperationFn("payments.start-checkout")
+  .mutate()
+  .input(z.object({ kind: z.enum(["boost", "badge", "pro"]) }))
+  .entities(["Payment"])
+  .auth()
+  .handler(async ({ ctx, input }) => {
+    const svc = new PaymentService(ctx);
+    return svc.initiate(ctx.user.id, input.kind);
+  });
+
+// — Service (business logic) —
+class PaymentService extends AuraService {
+  async initiate(userId: string, kind: string) {
+    const user = await this.db.user.findUnique({ where: { id: userId } });
+    const pricing = this.getPricing(kind);
+    // Direct DB access — no conflict with .action() vs .mutate()
+    const payment = await this.db.payment.create({
+      data: { userId, kind, amountXaf: pricing.amount, status: "PENDING" },
+    });
+    // Side effects via this.runMutation, this.agent, etc.
+    await this.runMutation("notifications.send", { userId, message: "..." });
+    return payment;
+  }
+}
+```
+
+### How it resolves issues
+
+| Issue | Before | After |
+|-------|--------|-------|
+| 3 actions crash on `ctx.db.*` | `.action()` → tombstoned Proxy → throw | `.mutate()` + Service → `this.db` full access |
+| `operationAsTool` loses session | Fresh context via `createAuraContext({source:"internal"})` | Service constructor receives the caller's `ctx` → session/user preserved |
+| Logic not testable | Must mock entire `AuraContext` | Mock `AuraService` or pass a test context |
+| Mixed responsibilities | Handler = validation + DB + side effects | Handler = validation only. Service = business logic |
+
+### Folder convention
+
+Services live in `src/operations/_services/` and follow the same namespace convention as operations:
+
+```
+src/operations/_services/
+├── payment-service.ts
+├── matching-service.ts
+├── inbox-service.ts
+├── chat-service.ts
+├── notification-service.ts
+├── graph/
+│   ├── knowledge-graph-service.ts
+│   └── embedding-service.ts
+└── agent/
+    ├── user-agent-service.ts
+    └── orchestrator-service.ts
+```
+
+Services can compose:
+```typescript
+class PaymentService extends AuraService {
+  constructor(ctx: AuraContext, private notificationService: NotificationService) {
+    super(ctx);
+  }
+}
+```
+
+### Relationship to other Aura patterns
+
+- **Operations** remain the public API boundary (validation, auth, entities, envelope).
+- **Services** encapsulate business logic and call operations via `this.runQuery/runMutation`.
+- **Repositories** (optional) encapsulate Prisma queries, called by services.
+- **Agents** receive services as tool callbacks, inheriting the calling user's context.
+
+### Backward compatibility
+
+Existing operations that use `ctx.db.*` directly continue to work — the Service pattern is additive, not a replacement. Operations can be migrated one by one at the developer's pace.

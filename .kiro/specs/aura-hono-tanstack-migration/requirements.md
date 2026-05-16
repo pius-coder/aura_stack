@@ -681,3 +681,48 @@ Functional parity MUST be preserved for every Aura subsystem currently shipping:
 8. **Codegen vs module augmentation for the typed client API surface (Requirement 24):** Decide between keeping the current string-name + `OperationsType` module-augmentation pattern, shipping a `aura:codegen` CLI emitting `_generated/api.ts`, or supporting both. The chosen mechanism MUST give end-to-end inference of input and output types in the IDE without manual generics.
 9. **Action primitive isolation (Requirement 16):** Decide how to forbid Prisma transaction usage at the type level inside `action()` handlers, e.g. by giving `action()` a distinct context type whose `db` field is omitted or replaced with a non-transactional client.
 10. **Scheduler durability semantics (Requirement 18):** Decide between **at-least-once** delivery (simpler, requires handler idempotency) and **exactly-once** delivery (harder, requires deduplication keys persisted alongside `AuraJobRun`). Document the chosen guarantee and the failure modes it implies for `ctx.scheduler.runAfter`.
+
+### Requirement 40: AuraService — OOP base class for business logic
+
+**User Story:** As an Aura application developer, I want to extract business logic from operation handlers into reusable, testable classes that have access to all Aura capabilities via `this.*` without passing `ctx` to every method.
+
+#### Acceptance Criteria
+
+1. THE Aura SHALL provide an `AuraService` class in `src/aura/server/service.ts` that receives `AuraContext` in its constructor.
+2. THE AuraService SHALL expose all Aura context features as getters and methods:
+   - `this.db` → `ctx.db`
+   - `this.user` → `ctx.user`
+   - `this.session` → `ctx.session`
+   - `this.agent` → `ctx.agent`
+   - `this.scheduler` → `ctx.scheduler`
+   - `this.storage` → `ctx.storage`
+   - `this.log` → `ctx.log`
+   - `this.audit` → `ctx.audit`
+   - `this.notify` → `ctx.notify`
+   - `this.bump` → `ctx.bump`
+   - `this.runQuery(ref, input)` → `ctx.runQuery(ref, input)`
+   - `this.runMutation(ref, input)` → `ctx.runMutation(ref, input)`
+   - `this.runAction(ref, input)` → `ctx.runAction(ref, input)`
+   - `this.invalidate(target)` → `ctx.invalidate(target)`
+   - `this.paginate(model, opts)` → `ctx.paginate(model, opts)`
+3. THE operation handler SHALL instantiate services with `new MonService(ctx)` and call methods without passing `ctx` again.
+4. THE AuraService SHALL be subclassable: `class UserService extends AuraService { ... }`.
+5. THE AuraService SHALL allow composition: `new PaymentService(new UserService(ctx))`.
+6. THE operation handler SHALL remain a thin wrapper:
+
+```ts
+defineOperationFn("payments.start-checkout")
+  .mutate()
+  .input(z.object({ kind: z.enum(["boost", "badge", "pro"]) }))
+  .entities(["Payment"])
+  .auth()
+  .handler(async ({ ctx, input }) => {
+    const svc = new PaymentService(new PaymentRepo(ctx));
+    return svc.initiate(ctx.user.id, input.kind);
+  });
+```
+
+7. THE AuraService SHALL NOT replace the operation builder — queries, mutations, actions, entity invalidation, auth control and envelope format remain declared on `defineOperationFn`.
+8. Services SHALL be testable by subclassing or by passing a mock context.
+9. Services SHALL follow the same folder convention as operations: `src/lib/services/<domain>/<name>.ts` or `src/operations/_services/<name>.ts` (decided in design).
+

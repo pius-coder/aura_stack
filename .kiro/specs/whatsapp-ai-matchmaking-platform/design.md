@@ -10,7 +10,32 @@ La plateforme se distingue par **trois choix architecturaux structurants** qui i
 2. **Un orchestrateur de matching séparé** des agents de conversation. L'`Orchestrateur_Matching` est un graphe LangGraph indépendant invoqué via tool calling depuis l'agent utilisateur. Cette séparation permet d'optimiser indépendamment les latences (l'orchestrateur cible 800 ms p95 sur le traversal, 300 ms p95 sur la similarité vectorielle), de paralléliser les composants Graph et Vector, et de mettre en cache les résultats dans Redis avec TTL 60 s.
 3. **Un Knowledge Graph relationnel hybride** stocké directement en PostgreSQL plutôt que dans une base graphe dédiée. Les entités (`User`, `Service`, `Skill`, `Location`, `Industry`, `Need`) et leurs relations typées (`PROVIDES`, `REQUIRES`, `LOCATED_IN`, `LOOKS_FOR`, `MATCHES`, `CONNECTED_TO`, `RATED`) sont stockées dans deux tables `entities` et `relations` exploitées par CTE récursives pour le traversal. Les embeddings vivent dans `graph_embeddings` (pgvector, HNSW, 1536 dimensions). Le matching final fusionne les deux signaux par **Reciprocal Rank Fusion (RRF)** suivi d'un module de diversité (Diversity_Mix) qui mixe profils très compatibles et profils complémentaires.
 
-Le design s'appuie systématiquement sur les primitives du framework Aura (cf. `.kiro/specs/aura-hono-tanstack-migration/design.md`) : `defineOperationFn` (queries, mutations, actions), `defineAgent`, `defineWorkflow`, `defineHttpAction`, `defineVectorIndex`, `defineSearchIndex`, `ctx.scheduler`, `ctx.storage`, broadcast WebSocket, components `@aura/auth`, `@aura/storage`, `@aura/notifications`, `@aura/rate-limit`. Les conventions kebab-case et la structure `src/operations/{domain}/{name}.{kind}.ts` sont appliquées partout.
+Le design s'appuie systématiquement sur les primitives du framework Aura (cf. `.kiro/specs/aura-hono-tanstack-migration/design.md`) : `defineOperationFn` (queries, mutations, actions), `defineAgent`, `defineWorkflow`, `defineHttpAction`, `defineVectorIndex`, `defineSearchIndex`, `ctx.scheduler`, `ctx.storage`, broadcast WebSocket, components `@aura/auth`, `@aura/storage`, `@aura/notifications`, `@aura/rate-limit`, et le pattern `AuraService` (Decision 26). Les conventions kebab-case et la structure `src/operations/{domain}/{name}.{kind}.ts` sont appliquées partout.
+
+**Pattern AuraService** : chaque couche métier expose un service qui `extends AuraService`. Les operations deviennent des thin handlers qui instancient le service et délèguent. Les services composent entre eux par constructeur.
+
+```ts
+// Operation = thin transport (validation + auth + délégation)
+defineOperationFn("chat.send-message")
+  .mutate()
+  .input(z.object({ conversationId: z.string(), body: z.string() }))
+  .entities(["ChatMessage", "Conversation"])
+  .auth()
+  .handler(async ({ ctx, input }) => {
+    const svc = new ChatService(ctx);
+    return svc.sendMessage(ctx.user.id, input.conversationId, input.body);
+  });
+
+// Service = logique métier (DB + side effects via this.*)
+class ChatService extends AuraService {
+  async sendMessage(userId: string, conversationId: string, body: string) {
+    const conv = await this.db.conversation.findUnique(...);
+    const msg = await this.db.chatMessage.create(...);
+    await this.notifyNewMessage(conv, msg);
+    return msg;
+  }
+}
+```
 
 ### Scope du design
 
@@ -198,6 +223,8 @@ L'architecture se décompose en **sept couches** logiques qui correspondent aux 
 
 **Responsabilité** : recevoir les messages WhatsApp entrants, envoyer les réponses sortantes, gérer la liaison par numéro, et abstraire la transition de Baileys (MVP) vers WhatsApp Business API (phase 2 obligatoire avant la monétisation, cf. R37).
 
+**Service** : `InboxService` (`src/operations/_services/inbox-service.ts`) → étend `AuraService`, expose `processIncoming(inboxId)`, `sendMessage(phone, body)`.
+
 ```
 ┌─────────────────────────────────────────────────────────────┐
 │  Couche Transport WhatsApp                                  │
@@ -283,6 +310,8 @@ La couche `WhatsAppGateway` rend l'application aveugle à l'implémentation : se
 
 **Responsabilité** : pour chaque utilisateur lié, exécuter le tour conversationnel WhatsApp avec une persona stricte (R11), un dialogue multilingue (R12), une hydratation contextuelle (R13), une détection d'intention de matching (R14) et une présentation des résultats (R15).
 
+**Service** : `UserAgentService` (`src/operations/_services/user-agent-service.ts`) → étend `AuraService`, expose `processMessage(userId, text): reply`, `createThread(userId): threadRef`. Utilise `ctx.agent.generateText()` en interne.
+
 ```
 ┌────────────────────────────────────────────────────────────────┐
 │ Graphe_Agent_User (LangGraph par user_id)                      │
@@ -334,6 +363,8 @@ Le détail des nodes (contrats, prompts, transitions) est en section **Conceptio
 ### Couche 3 — Orchestrateur Matching
 
 **Responsabilité** : résoudre une requête de mise en relation par fusion Graph_Traversal + Embedding_Query, application de Diversity_Mix, filtrage et caching Redis. Indépendant de la couche conversationnelle pour pouvoir être optimisé seul (latence cible 1-2 s p95, R41).
+
+**Service** : `MatchingService` (`src/operations/_services/matching-service.ts`) → étend `AuraService`, expose `findMatches(requesterId, constraints): MatchingResult`. Utilise `this.paginate()`, `this.runQuery()`, et le Knowledge Graph. Appelé par `UserAgentService` via tool call.
 
 ```
 ┌────────────────────────────────────────────────────────────────┐
@@ -393,6 +424,8 @@ Les algorithmes Graph_Traversal, RRF, Diversity_Mix sont détaillés en section 
 
 **Responsabilité** : stocker les entités et relations extraites (R17, R18), permettre le traversal performant (R19), maintenir les embeddings synchronisés (R20, R22), garantir le round-trip de sérialisation (R23).
 
+**Service** : `KnowledgeGraphService` (`src/operations/_services/knowledge-graph-service.ts`) → étend `AuraService`, expose `upsertEntity(userId, type, value)`, `upsertRelation(sourceId, targetId, predicate)`, `traverse(constraints): Candidate[]`, `regenerateEmbedding(entityId)`.
+
 ```
 ┌──────────────────────────────────────────────────────────────┐
 │ Knowledge Graph                                              │
@@ -440,6 +473,8 @@ Le détail du modèle d'entités (sous-types Zod par `type`) et du modèle de re
 
 **Responsabilité** : transporter en temps réel les messages des Conversation_Anonyme via Aura broadcast WebSocket (R26), gérer la latence < 500 ms (R27), notifier WhatsApp en cas d'absence (R16, R26.5), capturer les snapshots de Disputes (R9).
 
+**Service** : `ChatService` (`src/operations/_services/chat-service.ts`) → étend `AuraService`, expose `sendMessage(userId, conversationId, body): Message`, `markRead(userId, conversationId, messageId)`. Publie les événements `message:new` sur la room WS `conversation:{id}`. Notifie via `ctx.notify.via("new-message").send({...})` pour les notifications offline.
+
 ```
 ┌──────────────────────────────────────────────────────────┐
 │ Couche Chat                                              │
@@ -480,6 +515,8 @@ Le double opt-in (R24) est porté par le workflow `match.acceptance` qui crée l
 
 **Responsabilité** : abstraire les fournisseurs de paiement derrière une interface stable (R28), traiter les webhooks signés et idempotents (R29), gérer les workflows d'activation et de renouvellement (R31, R34), préparer l'Escrow phase 3 (R33).
 
+**Service** : `PaymentService` (`src/operations/_services/payment-service.ts`) → étend `AuraService`, expose `initiateCheckout(userId, kind): Payment`, `handleWebhook(provider, payload)`, `refund(paymentId)`. Utilise `PaymentProvider` interface (Fapshi/Flutterwave). Envoie les confirmations via `ctx.notify.via("payment-success").send({...})`.
+
 ```
 ┌──────────────────────────────────────────────────────────┐
 │ Couche Paiement                                          │
@@ -515,6 +552,8 @@ Le double opt-in (R24) est porté par le workflow `match.acceptance` qui crée l
 ### Couche 7 — Observabilité IA
 
 **Responsabilité** : tracer chaque appel LLM (R42.1), agréger les métriques business et IA (R42.2-4), exposer un dashboard Admin, propager un `correlationId` de bout en bout (R45.2).
+
+**Service** : `ObservabilityService` (`src/operations/_services/observability-service.ts`) → étend `AuraService`, expose `recordLlmCall(data)`, `getBusinessMetrics(since): Metrics`, `getAiMetrics(since): AiMetrics`. Utilisé par l'Admin_Console (R10) et le dashboard admin.
 
 ```
 ┌──────────────────────────────────────────────────────────┐
@@ -556,8 +595,19 @@ Cette section liste les modules applicatifs (operations, agents, workflows, http
 
 ### Inventaire des operations Aura
 
+Les operations sont des thin handlers qui délèguent aux Services dans `src/operations/_services/`.
+
 ```
 src/operations/
+├── _services/                           # ← Business logic layer (AuraService)
+│   ├── inbox-service.ts                 #   Couche 1 — Transport WhatsApp
+│   ├── user-agent-service.ts            #   Couche 2 — Graphe_Agent_User
+│   ├── matching-service.ts              #   Couche 3 — Orchestrateur Matching
+│   ├── knowledge-graph-service.ts       #   Couche 4 — Knowledge Graph
+│   ├── chat-service.ts                  #   Couche 5 — Chat temps réel
+│   ├── payment-service.ts               #   Couche 6 — Paiement
+│   └── alias-service.ts                 #   Génération d'alias
+│
 ├── _middleware/
 │   ├── with-region-filter.middleware.ts    ── injecte ctx.region
 │   ├── with-active-profile.middleware.ts   ── exige profile.status=active
@@ -631,8 +681,16 @@ src/operations/
 │   ├── cancel.operation.ts            (mutate, auth) — R34.4
 │   └── renew-charge.cron.ts           (cron) — R34.2
 │
-├── notifications/
-│   └── whatsapp-send.action.ts        (action, internal) — Outbox worker
+├── notifications/                       # defineNotificationFn — voir § Notifications
+│   ├── match-request.notification.ts    (notif) — R6.2, R16
+│   ├── match-accepted.notification.ts   (notif) — R6.4, R16.2
+│   ├── match-refused.notification.ts    (notif) — R16.2
+│   ├── new-message.notification.ts      (notif) — R16.1
+│   ├── payment-success.notification.ts  (notif) — R16.3, R31
+│   ├── warning.notification.ts          (notif) — R9.4
+│   └── suspension.notification.ts       (notif) — R9.5
+│
+│   # Dispatch via ctx.notify.via("match-accepted").send({...})
 │
 ├── graph/
 │   ├── upsert-entity.operation.ts     (mutate, internal) — R17, R18

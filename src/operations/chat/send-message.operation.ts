@@ -1,7 +1,6 @@
 import { defineOperationFn } from "@/aura/server/operation";
 import { z } from "zod";
 import { AuraError } from "@/aura/core/errors";
-import { notifyNewMessage } from "@/lib/notifications/send";
 
 export default defineOperationFn("chat.send-message")
   .mutate()
@@ -18,6 +17,10 @@ export default defineOperationFn("chat.send-message")
     });
 
     const recipientId = conv.userAId === ctx.user.id ? conv.userBId : conv.userAId;
-    await notifyNewMessage(recipientId, input.conversationId).catch(() => {});
+    const recipient = await ctx.db.auraUser.findUnique({ where: { id: recipientId }, select: { whatsappE164: true, profile: { select: { language: true } } } });
+    if (recipient?.whatsappE164) {
+      const lang = recipient.profile?.language ?? "FR";
+      ctx.notify.via("new-message").send({ phoneE164: recipient.whatsappE164, language: lang }).catch(() => {});
+    }
     return msg;
   });
