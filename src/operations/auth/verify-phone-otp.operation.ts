@@ -4,7 +4,8 @@ import { enforceRateLimit } from "@/aura/server/rate-limit";
 import { consumeOtpChallenge } from "@/aura/server/auth/otp";
 import { createSession } from "@/aura/server/auth/session";
 import { AuraOtpPurpose } from "@/generated/prisma/enums";
-import { generateAlias } from "@/lib/alias";
+import { AuthService } from "@/operations/_services/auth-service";
+import { AliasService } from "@/operations/_services/alias-service";
 
 const phoneSchema = z.string().regex(/^\+[1-9]\d{7,14}$/, "Numéro E.164 invalide");
 
@@ -31,7 +32,6 @@ export default defineOperationFn("auth.verify-phone-otp")
       purpose: AuraOtpPurpose.LOGIN_PHONE,
     });
 
-    // Find or create user by phone
     let phoneIdentity = await ctx.db.auraPhoneIdentity.findUnique({
       where: { phoneE164: result.phoneE164 },
       include: { user: true },
@@ -40,7 +40,6 @@ export default defineOperationFn("auth.verify-phone-otp")
     let isNewUser = false;
 
     if (!phoneIdentity) {
-      // First login — create user + phone identity + profile
       const user = await ctx.db.auraUser.create({ data: {} });
       phoneIdentity = await ctx.db.auraPhoneIdentity.create({
         data: {
@@ -59,13 +58,8 @@ export default defineOperationFn("auth.verify-phone-otp")
         data: { whatsappLinked: true, whatsappE164: result.phoneE164 },
       });
 
-      // Create minimal profile with alias
-      let alias = generateAlias();
-      for (let i = 0; i < 5; i++) {
-        const exists = await ctx.db.profile.findUnique({ where: { alias } });
-        if (!exists) break;
-        alias = generateAlias();
-      }
+      const aliasSvc = new AliasService(ctx);
+      const alias = await aliasSvc.generateUnique("FR");
       await ctx.db.profile.create({
         data: { userId: user.id, alias, language: "FR", status: "ACTIVE" },
       });

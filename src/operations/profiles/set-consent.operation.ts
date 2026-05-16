@@ -23,10 +23,8 @@ export default defineOperationFn("profiles.set-consent")
       dataProcessing: { accepted: true, at: now },
       whatsappComms: { accepted: true, at: now },
     };
-    const profile = await ctx.db.profile.update({
+    return ctx.db.profile.update({
       where: { userId: ctx.user.id },
       data: { consent },
     });
-    ctx.invalidate({ entity: "Profile", id: profile.id });
-    return profile;
   });

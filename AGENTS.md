@@ -131,7 +131,8 @@ export default defineOperationFn("domaine.action").mutate().input(z).entities([.
   return new MonService(ctx).method(input);
 });
 ```
-8. **Pattern service** (voir `docs/operations.md` § Service layer) :
+8. **Entity invalidation** — ne PAS appeler `ctx.invalidate()` dans les services. Le framework invalide automatiquement toutes les entités listées dans `.entities([...])` après chaque mutation.
+9. **Pattern service** (voir `docs/operations.md` § Service layer) :
 ```ts
 import { AuraService } from "@/aura/server/service";
 import { AuraError } from "@/aura/core/errors";
@@ -143,5 +144,5 @@ export class MonService extends AuraService {
   }
 }
 ```
-9. **Tests** — tests unitaires pour les services, tests d'intégration pour les operations, property-based tests pour les algorithmes (RRF, traversal, round-trip).
+10. **Tests** — tests unitaires pour les services, tests d'intégration pour les operations, property-based tests pour les algorithmes (RRF, traversal, round-trip).
 <!-- intent-skills:end -->

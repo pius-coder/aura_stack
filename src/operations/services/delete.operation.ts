@@ -1,6 +1,6 @@
 import { defineOperationFn } from "@/aura/server/operation";
 import { z } from "zod";
-import { AuraError } from "@/aura/core/errors";
+import { ServiceService } from "@/operations/_services/service-service";
 
 export default defineOperationFn("services.delete")
   .mutate()
@@ -8,9 +8,6 @@ export default defineOperationFn("services.delete")
   .entities(["Service"])
   .auth()
   .handler(async ({ ctx, input }) => {
-    const svc = await ctx.db.service.findUnique({ where: { id: input.id } });
-    if (!svc || svc.userId !== ctx.user.id) throw new AuraError("NOT_FOUND", "Service introuvable.");
-
-    await ctx.db.service.update({ where: { id: input.id }, data: { deletedAt: new Date() } });
-    return { ok: true };
+    const svc = new ServiceService(ctx);
+    return svc.delete(ctx.user.id, input.id);
   });

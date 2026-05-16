@@ -1,6 +1,6 @@
 import { defineOperationFn } from "@/aura/server/operation";
 import { z } from "zod";
-import { AuraError } from "@/aura/core/errors";
+import { ServiceService } from "@/operations/_services/service-service";
 
 export default defineOperationFn("services.update")
   .mutate()
@@ -17,9 +17,7 @@ export default defineOperationFn("services.update")
   .entities(["Service"])
   .auth()
   .handler(async ({ ctx, input }) => {
-    const svc = await ctx.db.service.findUnique({ where: { id: input.id } });
-    if (!svc || svc.userId !== ctx.user.id) throw new AuraError("NOT_FOUND", "Service introuvable.");
-
+    const svc = new ServiceService(ctx);
     const { id, ...data } = input;
-    return ctx.db.service.update({ where: { id }, data });
+    return svc.update(ctx.user.id, id, data);
   });
