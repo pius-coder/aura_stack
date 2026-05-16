@@ -55,3 +55,5 @@ export { default as embeddings_regenerate } from "./embeddings/regenerate.operat
 import "./notifications/match-request.notification";
 import "./notifications/match-accepted.notification";
 import "./notifications/match-refused.notification";
+import "./notifications/new-message.notification";
+import "./notifications/payment-success.notification";

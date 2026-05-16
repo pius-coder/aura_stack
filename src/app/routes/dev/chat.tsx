@@ -3,223 +3,205 @@ import { useState, useRef, useEffect } from 'react'
 
 export const Route = createFileRoute('/dev/chat')({ component: DevChatPage })
 
-const PHONES = [
-  { label: 'Alice (+237612345678)', value: '+237612345678' },
-  { label: 'Bob (+237698765432)', value: '+237698765432' },
-  { label: 'Clara (+237655000111)', value: '+237655000111' },
+/* ─── Types ─────────────────────────────────────── */
+
+interface Message { id: string; from: 'me' | 'orya'; text: string; time: string }
+
+/* ─── State ─────────────────────────────────────── */
+
+const PRESETS = [
+  { name: 'Alice', phone: '+237612345678' },
+  { name: 'Bob', phone: '+237698765432' },
+  { name: 'Clara', phone: '+237655000111' },
+  { name: 'Marcel', phone: '+237699000111' },
 ]
 
-interface Message {
-  id: string
-  from: 'user' | 'bot'
-  text: string
-  time: string
+function makeContact(name: string, phone: string) {
+  const c = ['bg-emerald-500', 'bg-blue-500', 'bg-violet-500', 'bg-amber-500', 'bg-rose-500']
+  return { id: phone, name, phone, color: c[Math.floor(Math.random() * c.length)], lastMsg: '', lastTime: '', unread: 0 }
 }
 
-interface Tab {
-  id: string
-  label: string
-  phone: string
-  messages: Message[]
-  loading: boolean
-}
+/* ─── Page ──────────────────────────────────────── */
 
 function DevChatPage() {
-  const [tabs, setTabs] = useState<Tab[]>([
-    { id: '1', label: 'Alice', phone: '+237612345678', messages: [], loading: false },
-    { id: '2', label: 'Bob', phone: '+237698765432', messages: [], loading: false },
-  ])
-  const [activeTab, setActiveTab] = useState('1')
+  const [contacts, setContacts] = useState(() => PRESETS.map((p) => makeContact(p.name, p.phone)))
+  const [activePhone, setActivePhone] = useState(contacts[0]?.phone ?? '')
+  const [messages, setMessages] = useState<Record<string, Message[]>>({})
+  const [loading, setLoading] = useState<Record<string, boolean>>({})
+  const [showNew, setShowNew] = useState(false)
+  const [newName, setNewName] = useState('')
+  const [newPhone, setNewPhone] = useState('')
 
-  const active = tabs.find((t) => t.id === activeTab)!
+  const activeMsgs = messages[activePhone] ?? []
+  const activeLoading = loading[activePhone] ?? false
 
-  function addTab() {
-    const used = tabs.map((t) => t.phone)
-    const avail = PHONES.find((p) => !used.includes(p.value))
-    if (!avail) return
-    const id = String(Date.now())
-    setTabs((prev) => [...prev, { id, label: avail.label.split('(')[0].trim(), phone: avail.value, messages: [], loading: false }])
-    setActiveTab(id)
+  function addContact(name: string, phone: string) {
+    if (!name.trim() || !phone.trim() || contacts.some((c) => c.phone === phone)) return
+    setContacts((prev) => [...prev, { ...makeContact(name, phone), lastMsg: 'Nouveau contact' }])
+    setNewName(''); setNewPhone(''); setShowNew(false); setActivePhone(phone)
   }
 
-  function closeTab(id: string) {
-    setTabs((prev) => {
-      const next = prev.filter((t) => t.id !== id)
-      if (activeTab === id && next.length > 0) setActiveTab(next[next.length - 1].id)
-      return next
-    })
+  function pushMsg(phone: string, msg: Message) {
+    setMessages((prev) => ({ ...prev, [phone]: [...(prev[phone] ?? []), msg] }))
+    setContacts((prev) => prev.map((c) => c.phone === phone
+      ? { ...c, lastMsg: msg.text.slice(0, 50), lastTime: msg.time, unread: phone !== activePhone ? c.unread + 1 : 0 }
+      : c))
   }
 
   return (
-    <div className="mx-auto flex h-screen max-w-6xl flex-col bg-slate-50">
-      {/* Tab bar */}
-      <div className="flex items-center border-b bg-white px-2 pt-2">
-        {tabs.map((tab) => (
-          <div
-            key={tab.id}
-            onClick={() => setActiveTab(tab.id)}
-            className={`flex cursor-pointer items-center gap-2 rounded-t-lg px-4 py-2 text-xs font-medium transition-colors ${
-              tab.id === activeTab ? 'bg-slate-50 text-slate-900' : 'text-slate-400 hover:text-slate-700'
-            }`}
-          >
-            <span className={`h-2 w-2 rounded-full ${tab.id === activeTab ? 'bg-emerald-500' : 'bg-slate-300'}`} />
-            {tab.label}
-            {tabs.length > 1 && (
-              <button
-                onClick={(e) => { e.stopPropagation(); closeTab(tab.id) }}
-                className="ml-1 text-slate-300 hover:text-red-500"
-              >
-                ×
-              </button>
-            )}
-          </div>
-        ))}
-        {tabs.length < PHONES.length && (
-          <button onClick={addTab} className="ml-1 rounded-lg px-3 py-2 text-xs text-slate-400 hover:bg-slate-100 hover:text-slate-700">
-            + Ajouter
-          </button>
+    <div className="flex h-screen bg-white">
+      {/* Sidebar */}
+      <div className="flex w-80 flex-col border-r border-slate-200 bg-slate-50">
+        <div className="flex items-center justify-between border-b bg-white px-4 py-3">
+          <h1 className="text-sm font-bold text-slate-800">Orya · Dev Chat</h1>
+          <a href="/" className="text-[10px] text-amber-600 underline">Site</a>
+        </div>
+        {/* New contact */}
+        <div className="border-b bg-white px-3 py-2">
+          {showNew ? (
+            <div className="space-y-1.5">
+              <input value={newName} onChange={(e) => setNewName(e.target.value)} placeholder="Prénom" className="w-full rounded-lg border px-3 py-1.5 text-xs outline-none focus:border-emerald-400" />
+              <input value={newPhone} onChange={(e) => setNewPhone(e.target.value)} placeholder="+237XXXXXXXXX" className="w-full rounded-lg border px-3 py-1.5 text-xs outline-none focus:border-emerald-400" />
+              <div className="flex gap-1">
+                <button onClick={() => addContact(newName, newPhone)} className="rounded-lg bg-emerald-500 px-3 py-1 text-[10px] text-white hover:bg-emerald-600">Ajouter</button>
+                <button onClick={() => setShowNew(false)} className="rounded-lg px-3 py-1 text-[10px] text-slate-400">Annuler</button>
+              </div>
+            </div>
+          ) : (
+            <button onClick={() => setShowNew(true)} className="flex w-full items-center gap-2 rounded-lg px-2 py-1.5 text-xs text-slate-500 hover:bg-slate-100">
+              <span className="flex h-5 w-5 items-center justify-center rounded-full border text-[12px]">+</span>
+              Nouveau contact
+            </button>
+          )}
+        </div>
+        {/* Contact list */}
+        <div className="flex-1 overflow-y-auto">
+          {contacts.map((c) => (
+            <div key={c.id} onClick={() => { setActivePhone(c.phone); setContacts((prev) => prev.map((x) => x.phone === c.phone ? { ...x, unread: 0 } : x)) }}
+              className={`flex cursor-pointer items-center gap-3 border-b border-slate-100 px-4 py-3 transition-colors hover:bg-white ${c.phone === activePhone ? 'bg-white' : ''}`}>
+              <div className={`flex h-10 w-10 shrink-0 items-center justify-center rounded-full text-sm font-bold text-white ${c.color}`}>{c.name[0]}</div>
+              <div className="min-w-0 flex-1">
+                <div className="flex items-center justify-between">
+                  <p className={`text-sm truncate ${c.unread > 0 ? 'font-bold' : 'font-medium'} text-slate-800`}>{c.name}</p>
+                  {c.lastTime && <span className="text-[10px] text-slate-400">{c.lastTime}</span>}
+                </div>
+                <p className="truncate text-[11px] text-slate-400">{c.lastMsg}</p>
+              </div>
+              {c.unread > 0 && <span className="flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-emerald-500 text-[9px] font-bold text-white">{c.unread}</span>}
+            </div>
+          ))}
+        </div>
+        <div className="border-t bg-white px-4 py-2">
+          <p className="text-[9px] text-amber-600 font-medium">🧪 Simulation via agent.chat-dev</p>
+          <p className="text-[8px] text-slate-400">Messages traités par l'agent Orya</p>
+        </div>
+      </div>
+
+      {/* Chat */}
+      <div className="flex flex-1 flex-col">
+        {activePhone ? (
+          <Conversation
+            contact={contacts.find((c) => c.phone === activePhone)!}
+            messages={activeMsgs}
+            loading={activeLoading}
+            onMsg={(m) => pushMsg(activePhone, m)}
+            onLoad={(v) => setLoading((prev) => ({ ...prev, [activePhone]: v }))}
+          />
+        ) : (
+          <div className="flex flex-1 items-center justify-center text-xs text-slate-300">Sélectionnez un contact</div>
         )}
-      </div>
-
-      {/* Chat panel */}
-      <div className="flex flex-1 overflow-hidden">
-        <ChatPanel
-          key={active.id}
-          tab={active}
-          onUpdate={(msg) => {
-            setTabs((prev) =>
-              prev.map((t) => (t.id === active.id ? { ...t, messages: [...t.messages, msg], loading: false } : t)),
-            )
-          }}
-          onLoading={(loading) => {
-            setTabs((prev) => prev.map((t) => (t.id === active.id ? { ...t, loading } : t)))
-          }}
-        />
-      </div>
-
-      {/* Dev badge */}
-      <div className="flex items-center justify-between border-t bg-amber-50 px-4 py-1.5">
-        <span className="text-[10px] text-amber-700 font-medium">🧪 Mode développement — les messages simulent le webhook WhatsApp</span>
-        <a href="/" className="text-[10px] text-amber-600 underline">Retour au site</a>
       </div>
     </div>
   )
 }
 
-function ChatPanel({ tab, onUpdate, onLoading }: {
-  tab: Tab
-  onUpdate: (msg: Message) => void
-  onLoading: (l: boolean) => void
+/* ─── Conversation ──────────────────────────────── */
+
+function Conversation({ contact, messages, loading, onMsg, onLoad }: {
+  contact: any; messages: Message[]; loading: boolean; onMsg: (m: Message) => void; onLoad: (v: boolean) => void
 }) {
   const [input, setInput] = useState('')
+  const [typing, setTyping] = useState(false)
   const bottomRef = useRef<HTMLDivElement>(null)
+  const tmr = useRef<ReturnType<typeof setTimeout>>()
 
-  useEffect(() => {
-    bottomRef.current?.scrollIntoView({ behavior: 'smooth' })
-  }, [tab.messages])
+  useEffect(() => { bottomRef.current?.scrollIntoView({ behavior: 'smooth' }) }, [messages, typing])
 
   async function send() {
     const text = input.trim()
-    if (!text || tab.loading) return
-    setInput('')
+    if (!text || loading) return
+    setInput(''); setTyping(false)
 
-    const userMsg: Message = { id: crypto.randomUUID(), from: 'user', text, time: new Date().toLocaleTimeString() }
-    onUpdate(userMsg)
+    onMsg({ id: crypto.randomUUID(), from: 'me', text, time: new Date().toLocaleTimeString() })
+    onLoad(true)
 
-    onLoading(true)
     try {
       const res = await fetch('/aura-internal/agent.chat-dev', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ phoneE164: tab.phone, text }),
+        body: JSON.stringify({ phoneE164: contact.phone, text }),
       })
       const data = await res.json()
-      const botMsg: Message = { id: crypto.randomUUID(), from: 'bot', text: data.reply ?? '(pas de réponse)', time: new Date().toLocaleTimeString() }
-      onUpdate(botMsg)
+      onMsg({ id: crypto.randomUUID(), from: 'orya', text: data.reply ?? '(pas de réponse)', time: new Date().toLocaleTimeString() })
     } catch {
-      const botMsg: Message = { id: crypto.randomUUID(), from: 'bot', text: '(erreur de connexion)', time: new Date().toLocaleTimeString() }
-      onUpdate(botMsg)
+      onMsg({ id: crypto.randomUUID(), from: 'orya', text: '(erreur)', time: new Date().toLocaleTimeString() })
     }
+    onLoad(false)
   }
 
   return (
-    <div className="flex flex-1 flex-col bg-white">
-      {/* Contact header */}
-      <div className="flex items-center gap-3 border-b bg-white px-5 py-3">
-        <div className="flex h-10 w-10 items-center justify-center rounded-full bg-emerald-100 text-sm font-bold text-emerald-700">
-          {tab.label[0]}
-        </div>
+    <>
+      <div className="flex items-center gap-3 border-b bg-white px-5 py-3 shadow-sm">
+        <div className={`flex h-10 w-10 shrink-0 items-center justify-center rounded-full text-sm font-bold text-white ${contact.color}`}>{contact.name[0]}</div>
         <div>
-          <p className="text-sm font-medium text-slate-900">{tab.label}</p>
-          <p className="text-[11px] text-slate-400">{tab.phone}</p>
+          <p className="text-sm font-semibold text-slate-900">{contact.name}</p>
+          <p className="text-[11px] text-emerald-600">Orya · en ligne</p>
         </div>
-        <div className="ml-auto flex items-center gap-2">
-          <select
-            value={tab.phone}
-            onChange={() => {}}
-            className="rounded-lg border border-slate-200 bg-slate-50 px-2 py-1 text-[11px] text-slate-500"
-          >
-            {PHONES.map((p) => (
-              <option key={p.value} value={p.value}>{p.label}</option>
-            ))}
-          </select>
-        </div>
+        <div className="ml-auto text-[11px] text-slate-400">{contact.phone}</div>
       </div>
 
-      {/* Messages */}
-      <div className="flex-1 space-y-2 overflow-y-auto px-5 py-4">
-        {tab.messages.length === 0 && (
-          <div className="flex h-full items-center justify-center">
-            <p className="text-xs text-slate-300">Envoyez un message pour commencer la conversation.</p>
-          </div>
-        )}
-        {tab.messages.map((m) => (
-          <div key={m.id} className={`flex ${m.from === 'user' ? 'justify-end' : 'justify-start'}`}>
-            <div
-              className={`max-w-[70%] rounded-2xl px-4 py-2.5 ${
-                m.from === 'user'
-                  ? 'bg-emerald-500 text-white rounded-br-md'
-                  : 'bg-slate-100 text-slate-800 rounded-bl-md'
-              }`}
-            >
-              <p className="text-sm leading-relaxed whitespace-pre-wrap">{m.text}</p>
-              <p className={`mt-1 text-[10px] text-right ${m.from === 'user' ? 'text-emerald-100' : 'text-slate-400'}`}>{m.time}</p>
+      <div className="flex-1 overflow-y-auto bg-[#efeae2] px-4 py-4">
+        <div className="mb-4 text-center">
+          <span className="inline-block rounded-full bg-white/80 px-3 py-1 text-[10px] text-slate-500 shadow-sm">
+            Vous discutez avec Orya — mode développement
+          </span>
+        </div>
+        {messages.map((m) => (
+          <div key={m.id} className={`mb-2 flex ${m.from === 'me' ? 'justify-end' : 'justify-start'}`}>
+            <div className={`max-w-[75%] rounded-2xl px-4 py-2.5 shadow-sm ${m.from === 'me' ? 'bg-[#d9fdd3] rounded-br-sm' : 'bg-white rounded-bl-sm'}`}>
+              <p className="text-sm leading-relaxed whitespace-pre-wrap text-slate-800">{m.text}</p>
+              <p className={`mt-0.5 text-[9px] text-right ${m.from === 'me' ? 'text-emerald-700/60' : 'text-slate-400'}`}>{m.time}</p>
             </div>
           </div>
         ))}
-        {tab.loading && (
-          <div className="flex justify-start">
-            <div className="max-w-[70%] rounded-2xl rounded-bl-md bg-slate-100 px-4 py-3">
-              <div className="flex gap-1">
-                <span className="h-2 w-2 animate-bounce rounded-full bg-slate-400" style={{ animationDelay: '0ms' }} />
-                <span className="h-2 w-2 animate-bounce rounded-full bg-slate-400" style={{ animationDelay: '150ms' }} />
-                <span className="h-2 w-2 animate-bounce rounded-full bg-slate-400" style={{ animationDelay: '300ms' }} />
-              </div>
+        {typing && (
+          <div className="mb-2 flex justify-start">
+            <div className="rounded-2xl rounded-bl-sm bg-white px-4 py-3 shadow-sm">
+              <div className="flex gap-1"><span className="h-2 w-2 animate-bounce rounded-full bg-slate-400" style={{ animationDelay: '0ms' }} /><span className="h-2 w-2 animate-bounce rounded-full bg-slate-400" style={{ animationDelay: '150ms' }} /><span className="h-2 w-2 animate-bounce rounded-full bg-slate-400" style={{ animationDelay: '300ms' }} /></div>
+            </div>
+          </div>
+        )}
+        {loading && (
+          <div className="mb-2 flex justify-start">
+            <div className="rounded-2xl rounded-bl-sm bg-white px-4 py-3 shadow-sm">
+              <div className="flex gap-1"><span className="h-2 w-2 animate-bounce rounded-full bg-emerald-400" style={{ animationDelay: '0ms' }} /><span className="h-2 w-2 animate-bounce rounded-full bg-emerald-400" style={{ animationDelay: '150ms' }} /><span className="h-2 w-2 animate-bounce rounded-full bg-emerald-400" style={{ animationDelay: '300ms' }} /></div>
             </div>
           </div>
         )}
         <div ref={bottomRef} />
       </div>
 
-      {/* Input */}
       <div className="border-t bg-white px-4 py-3">
         <div className="flex items-center gap-2">
-          <input
-            value={input}
-            onChange={(e) => setInput(e.target.value)}
+          <input value={input} onChange={(e) => { setInput(e.target.value); setTyping(true); clearTimeout(tmr.current); tmr.current = setTimeout(() => setTyping(false), 1500) }}
             onKeyDown={(e) => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); send() } }}
-            placeholder="Écrivez un message..."
-            className="flex-1 rounded-full border border-slate-200 bg-slate-50 px-4 py-2.5 text-sm outline-none focus:border-emerald-400 focus:bg-white"
-          />
-          <button
-            onClick={send}
-            disabled={!input.trim() || tab.loading}
-            className="flex h-10 w-10 items-center justify-center rounded-full bg-emerald-500 text-white disabled:opacity-40 hover:bg-emerald-600 transition-colors"
-          >
-            <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 12h14M12 5l7 7-7 7" /></svg>
+            placeholder="Écrivez un message à Orya..." className="flex-1 rounded-full border border-slate-200 bg-slate-50 px-5 py-3 text-sm outline-none focus:border-emerald-400 focus:bg-white" />
+          <button onClick={send} disabled={!input.trim() || loading}
+            className="flex h-11 w-11 items-center justify-center rounded-full bg-emerald-500 text-white disabled:opacity-40 hover:bg-emerald-600 transition-colors shadow-sm">
+            <svg className="h-4 w-4 rotate-45" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 19V5M5 12l7-7 7 7" /></svg>
           </button>
         </div>
       </div>
-    </div>
+    </>
   )
 }

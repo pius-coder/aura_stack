@@ -1,0 +1,11 @@
+import { defineNotificationFn } from "@/aura/server/notifications";
+import { z } from "zod";
+import { whatsAppGateway } from "@/lib/whatsapp";
+import { t } from "@/lib/i18n/translations";
+
+export default defineNotificationFn("new-message")
+  .payload(z.object({ phoneE164: z.string(), language: z.enum(["FR", "EN"]).default("FR") }))
+  .handler(async ({ payload }) => {
+    const gateway = whatsAppGateway();
+    await gateway.sendText(payload.phoneE164, t("message.new", payload.language), `notif-msg-${Date.now()}`);
+  });
