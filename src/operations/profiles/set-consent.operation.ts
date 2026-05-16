@@ -1,6 +1,6 @@
 import { defineOperationFn } from "@/aura/server/operation";
 import { z } from "zod";
-import { AuraError } from "@/aura/core/errors";
+import { ProfileService } from "@/operations/_services/profile-service";
 
 export default defineOperationFn("profiles.set-consent")
   .mutate()
@@ -14,17 +14,6 @@ export default defineOperationFn("profiles.set-consent")
   .entities(["Profile"])
   .auth()
   .handler(async ({ ctx, input }) => {
-    if (!input.privacy || !input.dataProcessing || !input.whatsappComms) {
-      throw new AuraError("BAD_REQUEST", "Tous les consentements sont requis.");
-    }
-    const now = new Date().toISOString();
-    const consent = {
-      privacy: { accepted: true, at: now },
-      dataProcessing: { accepted: true, at: now },
-      whatsappComms: { accepted: true, at: now },
-    };
-    return ctx.db.profile.update({
-      where: { userId: ctx.user.id },
-      data: { consent },
-    });
+    const svc = new ProfileService(ctx);
+    return svc.setConsent(ctx.user.id, input);
   });

@@ -53,6 +53,7 @@ export { default as ratings_listForUser } from "./ratings/list-for-user.operatio
 export { default as embeddings_regenerate } from "./embeddings/regenerate.operation";
 export { default as profiles_uploadPhoto } from "./profiles/upload-photo.action";
 export { default as profiles_setType } from "./profiles/set-type.operation";
+export { default as auth_generateLinkCode } from "./auth/generate-link-code.operation";
 // Side-effect imports for self-registration
 import "./services/search.search";
 // Notifications — side-effect imports for self-registration

@@ -68,6 +68,23 @@ export class ProfileService extends AuraService {
     });
   }
 
+  async setConsent(userId: string, consent: { privacy: boolean; dataProcessing: boolean; whatsappComms: boolean }) {
+    if (!consent.privacy || !consent.dataProcessing || !consent.whatsappComms) {
+      throw new AuraError("BAD_REQUEST", "Tous les consentements sont requis.");
+    }
+    const now = new Date().toISOString();
+    return this.db.profile.update({
+      where: { userId },
+      data: {
+        consent: {
+          privacy: { accepted: true, at: now },
+          dataProcessing: { accepted: true, at: now },
+          whatsappComms: { accepted: true, at: now },
+        },
+      },
+    });
+  }
+
   async setLanguage(userId: string, language: "FR" | "EN") {
     return this.db.profile.update({ where: { userId }, data: { language } });
   }
