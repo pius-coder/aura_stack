@@ -144,5 +144,6 @@ export class MonService extends AuraService {
   }
 }
 ```
-10. **Tests** — tests unitaires pour les services, tests d'intégration pour les operations, property-based tests pour les algorithmes (RRF, traversal, round-trip).
+10. **Re-run review agent after fixes until zero issues** — après chaque série de correctifs, relancer l'agent de review. Tant qu'il reste des issues, corriger et re-relancer. Ne commiter qu'après un rapport "ALL CLEAR — zero issues".
+11. **Tests** — tests unitaires pour les services, tests d'intégration pour les operations, property-based tests pour les algorithmes (RRF, traversal, round-trip).
 <!-- intent-skills:end -->

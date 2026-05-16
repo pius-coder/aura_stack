@@ -1,4 +1,4 @@
-import { createHmac } from "node:crypto";
+import { createHmac, randomUUID } from "node:crypto";
 import { getAuraSecret } from "./crypto";
 
 export interface PublishEventOptions {
@@ -27,6 +27,7 @@ export async function publishEvent(options: PublishEventOptions): Promise<{ ok: 
   if (!baseUrl) return { ok: true, reason: "broadcast-not-configured" };
 
   const body = JSON.stringify({
+    id: randomUUID(),
     room: options.room,
     event: options.event,
     data: options.data,
