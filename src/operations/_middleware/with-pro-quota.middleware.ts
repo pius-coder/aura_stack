@@ -17,8 +17,9 @@ export default defineCommonFn("withProQuota").run(async ({ ctx }) => {
   today.setHours(0, 0, 0, 0);
   const todayMatches = await ctx.db.match.count({
     where: {
-      OR: [{ requesterId: ctx.user.id }, { targetId: ctx.user.id }],
+      requesterId: ctx.user.id,
       createdAt: { gte: today },
+      status: { in: ["PENDING", "ACCEPTED"] },
     },
   });
   if (todayMatches >= MAX_MATCHES_PER_DAY_FREE) {

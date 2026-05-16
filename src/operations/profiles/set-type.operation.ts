@@ -1,0 +1,13 @@
+import { defineOperationFn } from "@/aura/server/operation";
+import { z } from "zod";
+import { ProfileService } from "@/operations/_services/profile-service";
+
+export default defineOperationFn("profiles.set-type")
+  .mutate()
+  .input(z.object({ type: z.enum(["standard", "prestataire"]) }))
+  .entities(["Profile"])
+  .auth()
+  .handler(async ({ ctx, input }) => {
+    const svc = new ProfileService(ctx);
+    return svc.setType(ctx.user.id, input.type);
+  });

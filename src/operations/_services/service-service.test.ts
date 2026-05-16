@@ -28,7 +28,7 @@ describe("ServiceService", () => {
       expect(created).toBe(true);
     });
 
-    it("rejects over 50 services without Pro", async () => {
+    it("rejects over 50 active services without Pro", async () => {
       const ctx = {
         db: {
           service: { count: async () => 50 },

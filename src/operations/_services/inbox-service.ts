@@ -58,6 +58,38 @@ export class InboxService extends AuraService {
   }
 
   private async handleLinkCode(phoneE164: string, code: string) {
+    // Check AuraUser.linkCode first (email-registered users without phone identity yet)
+    const user = await this.db.auraUser.findFirst({ where: { linkCode: code } });
+    if (user) {
+      if (!user.linkCodeExpiresAt || user.linkCodeExpiresAt < new Date()) return { msg: "Ce code a expire." };
+
+      const existingPhone = await this.db.auraPhoneIdentity.findUnique({ where: { phoneE164 } });
+      if (existingPhone && existingPhone.userId !== user.id) {
+        return { msg: "Ce numero est deja lie a un autre compte." };
+      }
+
+      await this.db.auraUser.update({
+        where: { id: user.id },
+        data: { whatsappLinked: true, whatsappE164: phoneE164, linkCode: null, linkCodeExpiresAt: null },
+      });
+
+      // Create phone identity if not exists
+      if (!existingPhone) {
+        await this.db.auraPhoneIdentity.create({
+          data: {
+            userId: user.id,
+            countryCode: `+${phoneE164.slice(0, 3)}`,
+            nationalNumber: phoneE164.slice(3),
+            phoneE164,
+            verifiedAt: new Date(),
+            whatsappVerifiedAt: new Date(),
+          },
+        });
+      }
+      return { msg: "Votre compte est desormais lie. Bienvenue sur Orya !" };
+    }
+
+    // Fallback: check AuraPhoneIdentity.linkCode (existing users with pre-linked phone)
     const identity = await this.db.auraPhoneIdentity.findFirst({ where: { linkCode: code, phoneE164 } });
     if (!identity) return { msg: "Ce code est invalide." };
     if (!identity.linkCodeExpiresAt || identity.linkCodeExpiresAt < new Date()) return { msg: "Ce code a expire." };

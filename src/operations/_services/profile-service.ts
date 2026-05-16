@@ -1,6 +1,5 @@
 import { AuraService } from "@/aura/server/service";
 import { AuraError } from "@/aura/core/errors";
-import type { Profile } from "@/generated/prisma";
 
 export class ProfileService extends AuraService {
   async getProfile(userId: string) {
@@ -44,16 +43,13 @@ export class ProfileService extends AuraService {
       throw new AuraError("VALIDATION_ERROR", "La bio ne peut pas dépasser 1000 caractères.");
     }
 
-    const profile = await this.db.profile.update({ where: { userId }, data });
-    this.scheduler?.runAfter(5000, "embeddings.regenerate" as any, { userId })?.catch?.(() => {});
-    return profile;
+    return this.db.profile.update({ where: { userId }, data });
   }
 
   async setType(userId: string, type: "standard" | "prestataire") {
     const profile = await this.db.profile.findUnique({ where: { userId } });
     if (!profile) throw new AuraError("NOT_FOUND", "Profil introuvable.");
 
-    // Can't convert from prestataire to standard if active services exist
     if (type === "standard" && profile.isProvider) {
       const activeServices = await this.db.service.count({
         where: { userId, isActive: true, deletedAt: null },
@@ -86,21 +82,26 @@ export class ProfileService extends AuraService {
     return { eligible: true };
   }
 
-  async canUploadPhoto(mimeType: string, size: number): Promise<boolean> {
-    const allowed = ["image/png", "image/jpg", "image/jpeg", "image/webp"];
-    if (!allowed.includes(mimeType)) return false;
-    if (size > 5 * 1024 * 1024) return false;
-    return true;
-  }
-
   async uploadPhoto(userId: string, file: File): Promise<string> {
-    if (!(await this.canUploadPhoto(file.type, file.size))) {
-      throw new AuraError("VALIDATION_ERROR", "Format ou taille invalide. Formats acceptés: png, jpg, jpeg, webp (max 5 Mo).");
+    const allowed = ["image/png", "image/jpg", "image/jpeg", "image/webp"];
+    if (!allowed.includes(file.type)) {
+      throw new AuraError("VALIDATION_ERROR", "Format invalide. Formats acceptés: png, jpg, jpeg, webp.");
+    }
+    if (file.size > 5 * 1024 * 1024) {
+      throw new AuraError("VALIDATION_ERROR", "Fichier trop volumineux (max 5 Mo).");
     }
 
-    const stored = await this.storage.store(file, { path: `profiles/${userId}/photo` });
-    await this.db.profile.update({ where: { userId }, data: { photoFileId: stored.id } });
+    const result = await this.storage.store({
+      data: file,
+      filename: file.name,
+      contentType: file.type,
+    });
 
-    return stored.id;
+    await this.db.profile.update({
+      where: { userId },
+      data: { photoFileId: result.storageId },
+    });
+
+    return result.storageId;
   }
 }

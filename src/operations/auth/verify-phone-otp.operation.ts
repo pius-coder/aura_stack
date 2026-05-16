@@ -1,11 +1,6 @@
 import { defineOperationFn } from "@/aura/server/operation";
 import { z } from "zod";
-import { enforceRateLimit } from "@/aura/server/rate-limit";
-import { consumeOtpChallenge } from "@/aura/server/auth/otp";
-import { createSession } from "@/aura/server/auth/session";
-import { AuraOtpPurpose } from "@/generated/prisma/enums";
 import { AuthService } from "@/operations/_services/auth-service";
-import { AliasService } from "@/operations/_services/alias-service";
 
 const phoneSchema = z.string().regex(/^\+[1-9]\d{7,14}$/, "Numéro E.164 invalide");
 
@@ -19,73 +14,6 @@ export default defineOperationFn("auth.verify-phone-otp")
   .entities(["AuraUser", "AuraPhoneIdentity", "AuraSession", "Profile"])
   .public()
   .handler(async ({ ctx, input }) => {
-    await enforceRateLimit(ctx.db, {
-      key: `otp:verify:${input.challengeId}`,
-      limit: 5,
-      windowSeconds: 900,
-    });
-
-    const result = await consumeOtpChallenge({
-      db: ctx.db,
-      challengeId: input.challengeId,
-      code: input.code,
-      purpose: AuraOtpPurpose.LOGIN_PHONE,
-    });
-
-    let phoneIdentity = await ctx.db.auraPhoneIdentity.findUnique({
-      where: { phoneE164: result.phoneE164 },
-      include: { user: true },
-    });
-
-    let isNewUser = false;
-
-    if (!phoneIdentity) {
-      const user = await ctx.db.auraUser.create({ data: {} });
-      phoneIdentity = await ctx.db.auraPhoneIdentity.create({
-        data: {
-          userId: user.id,
-          countryCode: result.phoneE164.slice(0, 4),
-          nationalNumber: result.phoneE164.slice(4),
-          phoneE164: result.phoneE164,
-          verifiedAt: new Date(),
-          whatsappVerifiedAt: new Date(),
-        },
-        include: { user: true },
-      });
-
-      await ctx.db.auraUser.update({
-        where: { id: user.id },
-        data: { whatsappLinked: true, whatsappE164: result.phoneE164 },
-      });
-
-      const aliasSvc = new AliasService(ctx);
-      const alias = await aliasSvc.generateUnique("FR");
-      await ctx.db.profile.create({
-        data: { userId: user.id, alias, language: "FR", status: "ACTIVE" },
-      });
-      isNewUser = true;
-    } else {
-      if (!phoneIdentity.verifiedAt || !phoneIdentity.whatsappVerifiedAt) {
-        await ctx.db.auraPhoneIdentity.update({
-          where: { id: phoneIdentity.id },
-          data: { verifiedAt: new Date(), whatsappVerifiedAt: new Date() },
-        });
-      }
-      if (!phoneIdentity.user.whatsappLinked) {
-        await ctx.db.auraUser.update({
-          where: { id: phoneIdentity.userId },
-          data: { whatsappLinked: true, whatsappE164: result.phoneE164 },
-        });
-      }
-    }
-
-    await createSession(ctx, phoneIdentity.userId);
-
-    const profile = await ctx.db.profile.findUnique({ where: { userId: phoneIdentity.userId } });
-
-    return {
-      userId: phoneIdentity.userId,
-      isNewUser,
-      hasProfile: !!(profile?.displayName),
-    };
+    const svc = new AuthService(ctx);
+    return svc.verifyPhoneOtp(input);
   });

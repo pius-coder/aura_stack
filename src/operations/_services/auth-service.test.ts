@@ -83,7 +83,7 @@ describe("AuthService", () => {
       } as unknown as AuraContext;
 
       const svc = new AuthService(ctx);
-      await expect(svc.register({ email: "dup@orya.com", password: "Str0ng!Pass12" })).rejects.toThrow("Cet email est déjà utilisé.");
+      await expect(svc.register({ email: "dup@orya.com", password: "Str0ng!Pass12" })).rejects.toThrow("Email ou mot de passe invalide.");
     });
   });
 

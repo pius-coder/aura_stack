@@ -12,7 +12,7 @@ export class ServiceService extends AuraService {
     zone?: string;
   }) {
     const count = await this.db.service.count({
-      where: { userId, deletedAt: null },
+      where: { userId, deletedAt: null, isActive: true },
     });
     if (count >= MAX_SERVICES_FREE_TIER) {
       const pro = await this.db.subscription.findFirst({

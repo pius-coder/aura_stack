@@ -10,5 +10,6 @@ export default defineOperationFn("profiles.upload-photo")
   .handler(async ({ ctx, input }) => {
     const svc = new ProfileService(ctx);
     const storedId = await svc.uploadPhoto(ctx.user.id, input.file);
-    return { fileId: storedId, url: ctx.storage.getUrl(storedId) };
+    const url = await ctx.storage.getUrl(storedId);
+    return { fileId: storedId, url };
   });

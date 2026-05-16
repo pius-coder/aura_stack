@@ -46,8 +46,10 @@ model AuraUser {
   displayName String?
   isAdmin     Boolean @default(false)
   isBlocked   Boolean @default(false)
-  whatsappLinked Boolean @default(false)
-  whatsappE164   String?
+  whatsappLinked   Boolean @default(false)
+  whatsappE164     String?
+  linkCode         String?
+  linkCodeExpiresAt DateTime?
 
   // Aura relations
   phoneIdentities    AuraPhoneIdentity[]
