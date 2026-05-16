@@ -1,166 +1,218 @@
-# Mémo Réinitialisation — Contexte Complet
+# Mémo Réinitialisation — Contexte Complet (Session Entière)
 
-## 🎯 Le Projet
+## 1. PREMIERS CONTACTS — Configuration Projet
 
-Plateforme de mise en relation WhatsApp (Orya) construite sur framework **Aura** (TanStack Start + Hono + Prisma + PostgreSQL/pgvector + WebSocket broadcast). Deux surfaces : dashboard web + bot WhatsApp avec agent IA par utilisateur, knowledge graph, matching par fusion graphe + vecteur (RRF).
+### Palette CSS
+L'utilisateur a demandé des changements de palette CSS dans `src/styles.css`. J'ai essayé plusieurs palettes :
+1. Chaude/sable → "trop sombre"
+2. Coral/mint/purple → "trop morose"
+3. Plus saturée → encore "trop morose"  
+4. Coral/sky/sunny → "c'est trop morose"
+5. Hot pink/cyan/gold → "vives pas plates"
+6. Violet/teal/tangerine → rejeté
+7. Lime/fuchsia/aqua → rejeté
+8. Rose-rouge/teal/gold → rejeté
+9. Palette actuelle avec outfit font
 
-## 📚 Documentation de Référence
+**Leçon :** L'utilisateur est exigeant sur le design. Ne pas proposer des palettes au hasard.
 
-| Quoi | Où |
-|------|-----|
-| Aura requirements | `.kiro/specs/aura-hono-tanstack-migration/requirements.md` |
-| Aura design | `.kiro/specs/aura-hono-tanstack-migration/design.md` |
-| Aura analysis (corrigé) | `.kiro/specs/aura-hono-tanstack-migration/analysis.md` |
-| WhatsApp requirements | `.kiro/specs/whatsapp-ai-matchmaking-platform/requirements.md` |
-| WhatsApp design | `.kiro/specs/whatsapp-ai-matchmaking-platform/design.md` |
-| Plan implémentation | `.kiro/specs/whatsapp-ai-matchmaking-platform/tasks.md` |
-| Docs Aura | `docs/*.md` |
-| AGENTS.md (workflow) | `AGENTS.md` |
+### Cloudflare Tunnel
+- L'utilisateur a fait tourner `npx cloudflared tunnel --url http://localhost:3000`
+- Puis a installé son propre service avec token : `sudo cloudflared service install <token>`
+- Mot de passe sudo : `123456`
+- Son domaine : `orya.globalimex.online`
+- A dû ajouter le host à `vite.config.ts` → `server: { allowedHosts: ["orya.globalimex.online"] }`
 
-## 🔴 Erreurs Que J'ai Commises
+### Evolution API
+- L'utilisateur a montré le dashboard Evolution API (webhook config)
+- Le webhook URL était vide → pointer vers l'app via cloudflared
 
-1. **Analysis biaisée** — J'ai dit que des features n'existaient pas sans vérifier (`AuraStoredFile`, `ctx.invalidate`, `api.ts` codegen, `defineSearchIndex`, `defineVectorIndex`, `defineComponent`, `ctx.scheduler`, `ctx.storage.store/getUrl`). **Toujours vérifier le code avant d'écrire.**
+---
 
-2. **Mauvaises imports `@/_services/`** — J'ai utilisé `@/_services/mon-service` au lieu de `@/operations/_services/mon-service`. L'alias `@/operations` est le bon.
+## 2. SPECS & CODEBASE
 
-3. **Pattern notification** — J'ai créé `src/lib/notifications/send.ts` manuellement au lieu d'utiliser `defineNotificationFn` d'Aura. **Utiliser `defineNotificationFn("name").payload(z).handler(fn)`** et dispatcher via `ctx.notify.via("name").send(payload)`.
+### Structure du projet
+- Framework **Aura** : TanStack Start + Hono + Prisma + PostgreSQL/pgvector
+- Deux specs :
+  - `.kiro/specs/aura-hono-tanstack-migration/` → le framework core
+  - `.kiro/specs/whatsapp-ai-matchmaking-platform/` → le projet Orya
+- Docs Aura : `docs/*.md`
+- Routes TanStack : `src/app/routes/`
+- Operations : `src/operations/`
+- Core Aura : `src/aura/`
 
-4. **Pattern action() cassé** — Les 3 operations en `.action()` utilisaient `ctx.db.*` et auraient crashé (le runner remplace `ctx.db` par un Proxy tombstoné pour les actions). **Solution :** `.mutate()` + service.
+### Home Page (`src/app/routes/index.tsx`)
+- Landing page "Orya" : connexions via WhatsApp
+- "Connecte les gens entre eux. Mêmes intérêts, même quartier, mêmes ambitions. Sur WhatsApp."
+- Pas d'app à télécharger, que WhatsApp
 
-5. **Dev/chat widget mal conçu** — J'ai fait des tabs/sélecteur de contact. L'utilisateur voulait une **sidebar contacts type WhatsApp Web** avec création de faux comptes, discussion avec Orya, et compréhension du flux batch (pas 1 message = 1 réponse).
+### Messages WhatsApp en batch
+**Important :** WhatsApp n'est PAS 1 message = 1 réponse. Le webhook recoit des BATCHES de messages. Le bot doit gérer ça correctement.
 
-6. **Skip reading created files** — J'ai écrit des fichiers sans les relire ensuite. **Toujours relire après création/modification.**
+---
 
-## ✅ Ce Qui a Été Fait (Commits)
+## 3. ANALYSE CODEBASE VS SPECS (analysis.md)
 
-### Commit 1 — `18eb26e` "feat(phase1): WhatsApp link code, alias FR/EN..."
-- Schema Prisma : `linkCode`, `linkCodeExpiresAt` sur `AuraPhoneIdentity` ; `whatsappLinked`, `whatsappE164` sur `AuraUser`
-- `auth/generate-link-code.operation.ts`, `auth/link-whatsapp.operation.ts`
-- `process-incoming.operation.ts` : détection code de liaison, blocage non-liés
-- `alias.ts` : générateur FR/EN
-- `lib/whatsapp/aggregator.ts` : agrégation 60s
-- `lib/i18n/detect.ts`, `translations.ts`
-- Notifications branchées dans match create/accept/refuse et chat send-message
+J'ai fait une première analyse que l'utilisateur a CORRIGÉE. J'avais dit que plusieurs features n'existaient pas alors qu'elles étaient déjà implémentées.
 
-### Commit 2 — `51bad52` "feat(dev): WhatsApp chat simulator widget..."
-- `agent/chat-dev.operation.ts`
-- `routes/dev/chat.tsx` (première version tabs)
+### Ce que j'ai dit FAUX (corrigé par l'utilisateur) :
+- `AuraStoredFile` n'existe pas → **FAUX**, il existe dans `prisma/schema.prisma` ligne 227
+- `ctx.invalidate({entity, id})` n'existe pas → **FAUX**, il existe dans `create-context.ts` ligne 192
+- `api.ts` codegen n'existe pas → **FAUX**, `src/aura/_generated/api.ts` existe (87 lignes)
+- `defineSearchIndex` n'existe pas → **FAUX**, `src/aura/server/search.ts` ligne 27
+- `defineVectorIndex` n'existe pas → **FAUX**, `src/aura/server/vector.ts` ligne 22
+- `defineComponent` n'existe pas → **FAUX**, `src/aura/core/component.ts` ligne 43
+- `ctx.scheduler.runAfter/runAt` n'existe pas → **FAUX**, `scheduler.ts` ligne 24, branché dans `create-context.ts`
+- `ctx.storage.store/getUrl` n'existe pas → **FAUX**, `storage/index.ts` lignes 156-176
+- R4 (DB-optimized reads) pas implémenté → **FAUX**, `defineDbReadFn` existe dans `db-read.ts`
 
-### Commit 3 — `de6e568` "refactor(notifications): use defineNotificationFn..."
+**Leçon : TOUJOURS vérifier le code avant d'écrire. Ne pas présumer qu'une feature n'existe pas.**
 
-### Commit 4 — `c082e14` "feat(aura): add AuraService base class + AliasService"
-- `src/aura/server/service.ts` + `service.test.ts`
-- `_services/alias-service.ts` + test
-- Tests notifications
+### Vrais problèmes identifiés (corrigés) :
 
-### Commit 5 — `4c71181` "feat(services): InboxService + AliasService tests"
-- `_services/inbox-service.ts` + test
-- Refactor `process-incoming.operation.ts` → utilise InboxService
+| # | Problème | Sévérité | Fichiers |
+|---|----------|----------|----------|
+| 1 | 3 actions utilisent `ctx.db.*` → CRASHENT | 🔴 | `process-incoming`, `matching/run`, `start-checkout` |
+| 2 | Auth ops référencent champs inexistants (`businessName`, `countryId`, etc.) | 🔴 | `src/aura/server/auth/operations.ts:38-50` |
+| 3 | `operationAsTool` perd le contexte (session/user) | 🟡 | `src/aura/server/ai/agent.ts:131-138` |
+| 4 | `.asTool()` sur OperationRef inexistant | 🟡 | Commentaire seulement dans agent.ts |
+| 5 | Agent streaming via hack `__agent_stream:` au lieu de rooms WS | 🟢 | `agent.ts:332-340` |
 
-### Commit 6 — `1ce40dc` "feat(services): MatchingService, PaymentService, ChatService..."
-- `_services/matching-service.ts` (keyword scoring + diversity 60/30/10)
-- `_services/payment-service.ts` (Fapshi)
-- `_services/chat-service.ts` (AuraError)
-- Fix matching/run, start-checkout → `.mutate()` + service
-- `new-message.notification.ts`, `payment-success.notification.ts`
-- dev/chat route update
+---
 
-### Commit 7 — `320f1b3` "docs: update AGENTS.md, operations.md, folder-conventions.md"
+## 4. ARCHITECTURE AURA — Les Patterns Corrects
 
-## 📁 Fichiers Clés Modifiés/Créés
+### Pipeline : requirements → design → implémentation
+**Toujours** dans cet ordre. L'utilisateur insiste beaucoup là-dessus.
 
-```
-src/aura/server/service.ts              ← AuraService base class
-src/aura/server/service.test.ts
-src/operations/_services/               ← Tous les services
-  ├── inbox-service.ts + test
-  ├── alias-service.ts + test
-  ├── matching-service.ts
-  ├── chat-service.ts
-  └── payment-service.ts
-src/operations/notifications/           ← Notifications
-  ├── match-request.notification.ts
-  ├── match-accepted.notification.ts
-  ├── match-refused.notification.ts
-  ├── new-message.notification.ts
-  └── payment-success.notification.ts
-src/operations/_registry.ts              ← Side-effect imports notifs
-src/operations/agent/
-  ├── process-incoming.operation.ts      ← Refactored → InboxService
-  └── chat-dev.operation.ts
-src/operations/matches/
-  ├── create.operation.ts                ← ctx.notify.via()
-  ├── accept.operation.ts
-  └── refuse.operation.ts
-src/operations/chat/
-  └── send-message.operation.ts
-src/operations/matching/
-  └── run.operation.ts                   ← Fix .mutate() + MatchingService
-src/operations/payments/
-  └── start-checkout.operation.ts        ← Fix .mutate() + PaymentService
-prisma/schema.prisma                     ← Nouveaux champs linkCode etc.
-```
+### Le Pattern `AuraService`
 
-## 🎯 Patterns Aura à Utiliser
+L'utilisateur a validé ce pattern après plusieurs essais/erreurs :
 
-### Opération = Thin Handler
 ```ts
-export default defineOperationFn("x")
-  .mutate()
-  .input(z.object({...}))
-  .entities(["Entity"])
-  .auth()
+// Operation = thin transport
+defineOperationFn("x")
+  .query().input(z).entities([...]).auth()
   .handler(async ({ ctx, input }) => {
     const svc = new MonService(ctx);  // ctx passé au constructeur
-    return svc.method(input);          // plus de ctx dans la logique
+    return svc.method(input);
   });
-```
 
-### Service = Logique Métier
-```ts
-export class MonService extends AuraService {
+// Service = logique métier
+class MonService extends AuraService {
   async method(input: Input) {
-    const data = await this.db.model.findUnique({ where: { id: input.id } });
-    if (!data) throw new AuraError("NOT_FOUND", "Introuvable.");
-    return this.db.model.create({ data: input });
+    return this.db.model.create({ data: input });  // this.db, this.user, etc.
   }
 }
 ```
 
-### Notification
+**Fichier :** `src/aura/server/service.ts`
+**Dossier services :** `src/operations/_services/`
+
+### Ce qui est disponible via `this.*` dans AuraService
+
+| Propriété | Source |
+|-----------|--------|
+| `this.db` | `ctx.db` (PrismaClient) |
+| `this.user` | `ctx.user` |
+| `this.session` | `ctx.session` |
+| `this.agent` | `ctx.agent` |
+| `this.scheduler` | `ctx.scheduler` |
+| `this.storage` | `ctx.storage` |
+| `this.notify` | `ctx.notify` (NotificationDispatcher) |
+| `this.log` | `ctx.log` |
+| `this.audit` | `ctx.audit` |
+| `this.invalidate(target)` | `ctx.invalidate` |
+| `this.paginate(model, opts)` | `ctx.paginate` |
+| `this.runQuery(ref, input)` | `ctx.runQuery` |
+| `this.runMutation(ref, input)` | `ctx.runMutation` |
+| `this.runAction(ref, input)` | `ctx.runAction` |
+
+### AuraError vs ctx.log.error vs Error
+
+| Code | Effet |
+|------|-------|
+| `throw new AuraError("NOT_FOUND", "msg")` | Retourné au client dans l'enveloppe JSON |
+| `ctx.log.error("msg", { detail })` | Log serveur seulement |
+| `throw new Error("msg")` | **À ÉVITER** → 500 sans message clair |
+
+### Le Pattern Notification (defineNotificationFn)
+
+**NE PAS** créer de helpers manuels. Utiliser le built-in Aura :
+
 ```ts
+// Définition (fichier dans src/operations/notifications/)
 export default defineNotificationFn("nom")
   .payload(z.object({ phoneE164: z.string() }))
   .handler(async ({ payload }) => {
-    const gateway = whatsAppGateway();
-    await gateway.sendText(payload.phoneE164, "Message", `id-${Date.now()}`);
+    await gateway.sendText(payload.phoneE164, "Message", `key-${Date.now()}`);
   });
-// Dispatch :
+
+// Dispatch (depuis n'importe où dans un handler/service)
 ctx.notify.via("nom").send(payload).catch(() => {});
 ```
 
-### Erreurs
-```ts
-throw new AuraError("CODE", "Message");  // Client voit l'erreur
-ctx.log.error("detail", { extra });      // Dev seulement
-```
-**Jamais** `throw new Error("message")` — ça donne un 500 sans message clair.
+Les notifications sont auto-enregistrées via des side-effect imports dans `src/operations/_registry.ts`.
 
-## 📋 Plan d'Implémentation Restant
+### Le Problème `.action()`
 
-Voir `.kiro/specs/whatsapp-ai-matchmaking-platform/tasks.md` (9 phases). Priorité :
-1. `_services/auth-service.ts` (R1 auth téléphone)
-2. `_services/profile-service.ts` (R3-R4 profil)
-3. UserAgentService + agent IA par utilisateur (Phase 3)
-4. WebSocket rooms pour chat temps réel (Phase 4)
-5. KnowledgeGraphService + CTE traversal (Phase 5)
-6. Admin/Observability (Phase 6-7)
-7. Tests E2E, déploiement (Phase 8)
+Les actions ont un DB Proxy tombstoné : `ctx.db` throw sur toute tentative d'accès.
+**Solution :** Utiliser `.mutate()` + service pour les opérations qui font à la fois DB + side effects.
+**OU** utiliser `ctx.runQuery/runMutation` depuis une action.
 
-## 🔧 Commandes
+---
 
-```bash
-bun run test              # Lancer les tests (vitest)
-bun run dev               # Lancer le serveur de dev
-bun src/aura/cli/cron.ts  # Lancer le worker cron
-```
+## 5. LES 7 SERVICES DU DESIGN WHATSAPP
+
+| Couche | Service | Fichier | Statut |
+|--------|---------|---------|--------|
+| 1. Transport WhatsApp | `InboxService` | `_services/inbox-service.ts` | ✅ Fait |
+| 2. Instance IA | `UserAgentService` | `_services/user-agent-service.ts` | ⏳ À faire |
+| 3. Orchestrateur Matching | `MatchingService` | `_services/matching-service.ts` | ✅ Fait (v1 keyword) |
+| 4. Knowledge Graph | `KnowledgeGraphService` | `_services/knowledge-graph-service.ts` | ⏳ À faire |
+| 5. Chat Temps Réel | `ChatService` | `_services/chat-service.ts` | ✅ Fait |
+| 6. Paiement | `PaymentService` | `_services/payment-service.ts` | ✅ Fait |
+| 7. Observabilité IA | `ObservabilityService` | `_services/observability-service.ts` | ⏳ À faire |
+| Cross-cutting | `AliasService` | `_services/alias-service.ts` | ✅ Fait |
+
+---
+
+## 6. TOUS LES COMMITS
+
+| Hash | Message |
+|------|---------|
+| `18eb26e` | feat(phase1): WhatsApp link code, alias FR/EN, notifications, lang detection |
+| `51bad52` | feat(dev): WhatsApp chat simulator widget for local dev |
+| `de6e568` | refactor(notifications): use defineNotificationFn, add AuraService pattern |
+| `c082e14` | feat(aura): add AuraService base class + AliasService |
+| `4c71181` | feat(services): InboxService + AliasService tests |
+| `1ce40dc` | feat(services): MatchingService, PaymentService, ChatService |
+| `320f1b3` | docs: update AGENTS.md, operations.md, folder-conventions.md |
+| `32c2d1e` | chore: add MEMO.md with full context for reset |
+
+---
+
+## 7. ACTIONS À VENIR (Priorité)
+
+1. **AuthService** (`_services/auth-service.ts`) — refactor auth ops
+2. **ProfileService** (`_services/profile-service.ts`) — R3-R4
+3. **UserAgentService** (`_services/user-agent-service.ts`) — agent IA par utilisateur + extraction LLM + intention
+4. **WebSocket rooms** — broadcast `/ws/chat` avec pub/sub room-based
+5. **KnowledgeGraphService** — CTE récursive, pgvector, embeddings
+6. **ObservabilityService** — métriques business/IA
+7. **Tests E2E + Docker compose**
+
+---
+
+## 8. ERREURS À NE PAS RÉPÉTER
+
+1. **Ne pas présumer qu'une feature n'existe pas** sans vérifier le code
+2. **Utiliser `@/operations/_services/`** pas `@/_services/`
+3. **Utiliser `defineNotificationFn`** pas de helpers manuels
+4. **Ne pas mettre `ctx.db` dans une action** — utiliser `.mutate()` ou `ctx.runMutation()`
+5. **Relire les fichiers après les avoir créés/modifiés**
+6. **Pipeline** : toujours specs → code → doc → tests → implé → relecture → tests → commit
+7. **Imports** : `@/operations/_services/mon-service` pour les services depuis les operations
+8. **Imports dans _registry.ts** : les notifications ont besoin de side-effect imports
+9. **Tests de notification** : importer les fichiers de notification dans le test pour les enregistrer
+10. **Ne pas ignorer le flux batch de WhatsApp** — pas 1 msg = 1 réponse
