@@ -270,3 +270,9 @@ Les actions ont un DB Proxy tombstoné : `ctx.db` throw sur toute tentative d'ac
 14. **WhatsApp fonctionne en BATCH, pas en 1 msg = 1 réponse.**
     - Le webhook reçoit plusieurs messages à la fois.
     - ✅ **Correction :** Tenir compte du flux batch dans le traitement.
+
+15. **TOUT dans un seul fichier au lieu de split en composants indépendants.**
+    - J'ai mis `DevChatPage`, `ChatConversation`, les types, les helpers TOUT dans `dev/chat.tsx`.
+    - L'utilisateur m'a demandé plusieurs fois de split en composants réutilisables avec leurs propres fichiers et props.
+    - J'ai ignoré et tout laissé dans un monolithe.
+    - ✅ **Correction :** Chaque composant = un fichier dédié dans `src/app/components/` ou `src/aura/ui/`. Props typées, pas de dépendances cachées. Ex: `ChatSidebar.tsx`, `ChatMessage.tsx`, `ChatInput.tsx`, `ContactList.tsx`.
