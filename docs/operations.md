@@ -169,16 +169,75 @@ String names also work for legacy / dynamic dispatch:
 await ctx.runMutation("orders.markRefunded", { id });
 ```
 
-## File location & naming
+## Service layer (AuraService)
 
-Operations live in `src/operations/<domain>/<name>.operation.ts`. The dotted operation name is **derived** from the file path:
+Business logic should NOT live in operation handlers. Operations are thin transports (validation + auth + delegation). Services encapsulate business logic and DB access.
 
-| File | Operation name |
-|------|----------------|
-| `src/operations/system/health.operation.ts` | `system.health` |
-| `src/operations/todos/list.operation.ts` | `todos.list` |
-| `src/operations/admin/users/ban.operation.ts` | `admin.users.ban` |
+### Pattern
 
-File names must be **kebab-case** (Req 39): `product-by-slug.operation.ts` → `product-by-slug` (preserved as-is in the operation name).
+```ts
+// — Operation: thin handler —
+import { defineOperationFn } from "@/aura/server/operation";
+import { z } from "zod";
+import { TodoService } from "@/operations/_services/todo-service";
 
-See [Folder conventions](./folder-conventions.md) for the full set of suffix-based file types.
+export default defineOperationFn("todos.create")
+  .mutate()
+  .input(z.object({ title: z.string() }))
+  .entities(["Todo"])
+  .auth()
+  .handler(async ({ ctx, input }) => {
+    const svc = new TodoService(ctx);       // ctx passed once to constructor
+    return svc.create(ctx.user.id, input.title);  // no ctx in business logic
+  });
+
+// — Service: business logic —
+import { AuraService } from "@/aura/server/service";
+import { AuraError } from "@/aura/core/errors";
+
+export class TodoService extends AuraService {
+  async create(userId: string, title: string) {
+    // All Aura features available via this.*
+    const prev = await this.db.todo.findFirst({ where: { userId, title } });
+    if (prev) throw new AuraError("CONFLICT", "Todo already exists");
+
+    const todo = await this.db.todo.create({ data: { userId, title } });
+    await this.notify.via("todo-created").send({ userId, todoId: todo.id }).catch(() => {});
+    return todo;
+  }
+}
+```
+
+### Available via `this.*`
+
+| Property | Source | Type |
+|----------|--------|------|
+| `this.db` | `ctx.db` | PrismaClient |
+| `this.user` | `ctx.user` | AuraUser |
+| `this.session` | `ctx.session` | AuraSessionData |
+| `this.agent` | `ctx.agent` | AuraAgent |
+| `this.scheduler` | `ctx.scheduler` | AuraScheduler |
+| `this.storage` | `ctx.storage` | AuraStorage |
+| `this.notify` | `ctx.notify` | NotificationDispatcher |
+| `this.log` | `ctx.log` | AuraLogger |
+| `this.audit` | `ctx.audit` | AuraAuditContext |
+| `this.invalidate(t)` | `ctx.invalidate` | entity invalidation |
+| `this.paginate(m, o)` | `ctx.paginate` | cursor pagination |
+| `this.runQuery(r, i)` | `ctx.runQuery` | typed in-process call |
+| `this.runMutation(r, i)` | `ctx.runMutation` | typed in-process call |
+
+### Composition
+
+Services compose naturally via constructor injection:
+
+```ts
+export class PaymentService extends AuraService {
+  constructor(ctx: AuraContext, private userSvc: UserService) {
+    super(ctx);
+  }
+}
+```
+
+### Location
+
+Services live in `src/operations/_services/<name>.ts` — the `_services/` directory is a reserved name that does not contribute to operation namespacing. See [Folder conventions](./folder-conventions.md) for details.

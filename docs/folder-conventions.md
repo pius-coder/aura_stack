@@ -7,6 +7,10 @@ Aura enforces a strict folder + file-name convention. Every artifact type has a 
 ```
 src/operations/
 ├── _registry.ts                     # Auto-generated barrel
+├── _services/                       # ← Business logic services (extends AuraService)
+│   ├── todo-service.ts              #   NOT namespaced — _services/ is a reserved
+│   ├── payment-service.ts           #   directory that doesn't create operation names
+│   └── notification-service.ts
 ├── _middleware/                     # Reusable middleware
 │   ├── with-auth.middleware.ts
 │   └── with-organization.middleware.ts
@@ -22,6 +26,9 @@ src/operations/
 ├── ai/
 │   ├── todo-planner.agent.ts        # → agent "ai.todo-planner"
 │   └── customer-support.agent.ts
+├── notifications/                   # defineNotificationFn — ne créent pas d'operation
+│   ├── match-request.notification.ts
+│   └── payment-success.notification.ts
 ├── webhooks/
 │   └── stripe.http.ts               # → POST /aura-http/webhooks/stripe
 └── documents/
@@ -44,6 +51,8 @@ src/operations/
 | `.vector.ts` | pgvector index | `defineVectorIndex(model, { ... })` | ✅ |
 | `.db-read.ts` | Optimized DB read (view, raw SQL) | `defineDbReadFn({ ... })` | ✅ |
 | `.component.ts` | Reusable Aura component | `defineComponent(name, { ... })` | ✅ |
+| `.notification.ts` | Notification definition | `defineNotificationFn(name).payload(z).handler(fn)` | ✅ |
+| `.service.ts` | Business logic service (in `_services/`) | `extends AuraService` | ✅ |
 
 ## Name derivation
 

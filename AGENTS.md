@@ -1,4 +1,3 @@
-<!-- intent-skills:start -->
 # Skill mappings - load `use` with `npx @tanstack/intent@latest load <use>`.
 skills:
   - when: "Install TanStack Devtools, pick framework adapter (React/Vue/Solid/Preact), register plugins via plugins prop, configure shell (position, hotkeys, theme, hideUntilHover, requireUrlFlag, eventBusConfig). TanStackDevtools component, defaultOpen, localStorage persistence."
@@ -71,4 +70,78 @@ bun run test
 ```
 
 This executes `vitest run`. Fix any failures before marking the task done or moving to the next task.
+
+## Aura project workflow
+
+### Documentation de référence
+
+| Sujet | Fichier |
+|-------|---------|
+| Opérations (query/mutate/action) | `docs/operations.md` |
+| Services métier (AuraService) | `docs/operations.md` (section "Service layer") |
+| Conventions de fichiers | `docs/folder-conventions.md` |
+| Notifications | `docs/operations.md` ou `src/aura/server/notifications.ts` |
+| Agents IA | `docs/ai-agents.md` |
+| Workflows durables | `docs/workflows.md` |
+| Contexte Aura (ctx) | `docs/context.md` |
+| UI Kit (shadcn) | `docs/ui-kit.md` |
+| Auth (OTP, sessions) | `docs/auth.md` |
+| Realtime / broadcast | `docs/realtime.md` |
+| Pagination / search | `docs/pagination-search.md` |
+| HTTP actions (webhooks) | `docs/http-actions.md` |
+| Scheduler / cron | `docs/scheduler-cron.md` |
+| Stockage fichiers | `docs/storage.md` |
+| Architecture générale | `docs/architecture.md` |
+| Specs Aura | `.kiro/specs/aura-hono-tanstack-migration/requirements.md` → `design.md` |
+| Specs WhatsApp | `.kiro/specs/whatsapp-ai-matchmaking-platform/requirements.md` → `design.md` |
+
+### Pipeline par tâche
+
+Chaque tâche suit cet ordre strict :
+
+1. **Lire les specs** — `.kiro/specs/aura-hono-tanstack-migration/` (requirements → design) ET `.kiro/specs/whatsapp-ai-matchmaking-platform/` (requirements → design). Comprendre le `R<n>` et la couche design concernée.
+2. **Lire le code existant** — `src/operations/`, `src/aura/`, `prisma/schema.prisma`, `src/app/routes/`. Lire TOUS les fichiers pertinents avant d'écrire une ligne.
+3. **Lire la doc Aura** — `docs/<sujet>.md` pour comprendre le pattern à utiliser (opération, service, notification, agent, etc.).
+4. **Écrire les tests d'abord** (si applicable) — dans `src/operations/_services/*.test.ts` ou `src/operations/**/*.test.ts`.
+5. **Implémenter** — suivre les patterns Aura documentés :
+   - Opération = thin handler (voir `docs/operations.md`)
+   - Service = `extends AuraService` (voir `docs/operations.md` § Service layer)
+   - Notification = `defineNotificationFn` (voir `src/aura/server/notifications.ts`)
+   - Agent = `defineAgent` (voir `docs/ai-agents.md`)
+   - Workflow = `defineWorkflow` (voir `docs/workflows.md`)
+   - HTTP action = `defineHttpAction` (voir `docs/http-actions.md`)
+6. **Lire le fichier créé** — toujours lire le fichier après l'avoir écrit pour vérifier.
+7. **Lire les fichiers modifiés** — toujours relire les fichiers après les avoir modifiés.
+8. **Tests** — `bun run test` (tous verts).
+9. **Commit** — message clair avec scope et résumé.
+
+### Principes
+
+1. **Jamais de code sans specs** — toujours vérifier le requirements.md et design.md avant d'écrire.
+2. **Jamais de modification sans lecture** — toujours lire TOUS les fichiers concernés avant d'éditer.
+3. **Batch operations** — lire d'abord tous les fichiers du domaine, planifier les changements, puis exécuter.
+4. **AuraError > Error** — toutes les erreurs métier sont `throw new AuraError("CODE", "message")`. Pas de `throw new Error(...)`.
+5. **AuraService > handlers nus** — la logique métier va dans `src/operations/_services/*.ts`, pas dans le handler.
+6. **defineNotificationFn > helpers manuels** — les notifications sont déclarées via `defineNotificationFn`.
+7. **Pattern operation** (voir `docs/operations.md`) :
+```ts
+import { defineOperationFn } from "@/aura/server/operation";
+import { MonService } from "@/operations/_services/mon-service";
+export default defineOperationFn("domaine.action").mutate().input(z).entities([...]).auth().handler(async ({ctx, input}) => {
+  return new MonService(ctx).method(input);
+});
+```
+8. **Pattern service** (voir `docs/operations.md` § Service layer) :
+```ts
+import { AuraService } from "@/aura/server/service";
+import { AuraError } from "@/aura/core/errors";
+export class MonService extends AuraService {
+  async method(input: Input) {
+    const data = await this.db.model.findUnique(...);
+    if (!data) throw new AuraError("NOT_FOUND", "...");
+    return this.db.model.create(...);
+  }
+}
+```
+9. **Tests** — tests unitaires pour les services, tests d'intégration pour les operations, property-based tests pour les algorithmes (RRF, traversal, round-trip).
 <!-- intent-skills:end -->
