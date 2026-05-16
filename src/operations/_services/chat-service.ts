@@ -1,5 +1,6 @@
 import { AuraService } from "@/aura/server/service";
 import { AuraError } from "@/aura/core/errors";
+import { publishEvent } from "@/aura/server/publish";
 
 export class ChatService extends AuraService {
   async sendMessage(userId: string, conversationId: string, body: string) {
@@ -19,11 +20,36 @@ export class ChatService extends AuraService {
       select: { whatsappE164: true, profile: { select: { language: true } } },
     });
 
+    void publishEvent({
+      room: `conversation:${conversationId}`,
+      event: "message:new",
+      data: { id: msg.id, senderId: userId, body, createdAt: msg.createdAt.toISOString() },
+    });
+
+    void publishEvent({
+      room: `user:${recipientId}`,
+      event: "message:received",
+      data: { conversationId, messageId: msg.id },
+    });
+
     if (recipient?.whatsappE164) {
       const lang = recipient.profile?.language ?? "FR";
       this.notify.via("new-message").send({ phoneE164: recipient.whatsappE164, language: lang }).catch(() => {});
     }
 
     return msg;
+  }
+
+  async sendTyping(userId: string, conversationId: string) {
+    const conv = await this.db.conversation.findUnique({ where: { id: conversationId } });
+    if (!conv) throw new AuraError("NOT_FOUND", "Conversation introuvable.");
+    if (conv.userAId !== userId && conv.userBId !== userId) throw new AuraError("FORBIDDEN", "Acces refuse.");
+    if (conv.status !== "OPEN") throw new AuraError("BAD_REQUEST", "Conversation fermee.");
+
+    void publishEvent({
+      room: `conversation:${conversationId}`,
+      event: "typing",
+      data: { userId },
+    });
   }
 }

@@ -35,6 +35,7 @@ export { default as matches_listIncoming } from "./matches/list-incoming.operati
 export { default as chat_sendMessage } from "./chat/send-message.operation";
 export { default as chat_listMessages } from "./chat/list-messages.operation";
 export { default as chat_listConversations } from "./chat/list-conversations.operation";
+export { default as chat_typing } from "./chat/typing.operation";
 export { default as ratings_create } from "./ratings/create.operation";
 export { default as disputes_create } from "./disputes/create.operation";
 export { default as disputes_resolve } from "./disputes/resolve.operation";

@@ -53,11 +53,12 @@ function resolveSecret(): string {
 
 const SECRET = resolveSecret();
 
-// ─── Clients ──────────────────────────────────────────────────────────────────
+// ─── Clients + Rooms ─────────────────────────────────────────────────────────
 
 interface WsClient {
   send: (data: string) => void;
   lastPong: number;
+  rooms: Set<string>;
 }
 
 const clients = new Set<WsClient>();
@@ -66,6 +67,21 @@ function fanout(payload: string, except?: WsClient): number {
   let sent = 0;
   for (const client of clients) {
     if (client === except) continue;
+    try {
+      client.send(payload);
+      sent += 1;
+    } catch {
+      clients.delete(client);
+    }
+  }
+  return sent;
+}
+
+function fanoutRoom(payload: string, room: string, except?: WsClient): number {
+  let sent = 0;
+  for (const client of clients) {
+    if (client === except) continue;
+    if (!client.rooms.has(room)) continue;
     try {
       client.send(payload);
       sent += 1;
@@ -124,6 +140,44 @@ app.use(
 app.get("/health", (c) =>
   c.json({ ok: true, clients: clients.size, uptime: process.uptime() }),
 );
+
+// ─── POST /publish — publier un événement dans une room (signé HMAC) ──────────
+
+interface PublishPayload {
+  room: string;
+  event: string;
+  data?: unknown;
+}
+
+app.post("/publish", async (c) => {
+  const raw = await c.req.text();
+  const timestamp = c.req.header("x-aura-timestamp") ?? null;
+  const signature = c.req.header("x-aura-signature") ?? null;
+
+  const check = verifySignature(raw, timestamp, signature);
+  if (!check.ok) return c.json({ ok: false, reason: check.reason }, 403);
+
+  let parsed: PublishPayload;
+  try {
+    parsed = JSON.parse(raw) as PublishPayload;
+  } catch {
+    return c.json({ ok: false, reason: "invalid-json" }, 400);
+  }
+
+  if (!parsed.room || !parsed.event) {
+    return c.json({ ok: false, reason: "missing-room-or-event" }, 400);
+  }
+
+  const payload = JSON.stringify({
+    type: parsed.event,
+    room: parsed.room,
+    data: parsed.data,
+  });
+
+  const relayed = fanoutRoom(payload, parsed.room);
+  console.log(`[aura:broadcast] /publish → ${relayed} client(s) dans ${parsed.room} pour ${parsed.event}`);
+  return c.json({ ok: true, relayed });
+});
 
 // ─── POST /invalidate — chemin serveur → serveur (cron/outbox/rsc) ────────────
 
@@ -189,6 +243,7 @@ app.get(
       const client: WsClient = {
         send: (data) => ws.send(data),
         lastPong: Date.now(),
+        rooms: new Set(),
       };
       (ws as unknown as { __client?: WsClient }).__client = client;
       clients.add(client);
@@ -199,7 +254,7 @@ app.get(
       const client = (ws as unknown as { __client?: WsClient }).__client;
       if (!client) return;
 
-      let msg: { type?: string; id?: string; keys?: unknown };
+      let msg: { type?: string; id?: string; keys?: unknown; room?: string; data?: unknown };
       try {
         msg = JSON.parse(event.data as string);
       } catch {
@@ -214,6 +269,16 @@ app.get(
 
       if (msg.type === "PONG") {
         client.lastPong = Date.now();
+        return;
+      }
+
+      if (msg.type === "JOIN" && typeof msg.room === "string") {
+        client.rooms.add(msg.room);
+        return;
+      }
+
+      if (msg.type === "LEAVE" && typeof msg.room === "string") {
+        client.rooms.delete(msg.room);
         return;
       }
 
@@ -300,4 +365,7 @@ export default {
 console.log(
   `[aura:broadcast] HTTP  http://localhost:${PORT}/invalidate (signé HMAC)`,
 );
-console.log(`[aura:broadcast] WS    ws://localhost:${PORT}/ws`);
+console.log(
+  `[aura:broadcast] HTTP  http://localhost:${PORT}/publish (signé HMAC)`,
+);
+console.log(`[aura:broadcast] WS    ws://localhost:${PORT}/ws (rooms: JOIN/LEAVE)`);
