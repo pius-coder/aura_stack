@@ -40,28 +40,16 @@ function userSafe(args: {
   phoneE164: string;
   phoneVerifiedAt: Date | null;
   displayName: string | null;
-  businessName: string | null;
   email: string | null;
   isAdmin: boolean;
-  countryId: string | null;
-  currencyCode: string | null;
-  onboardingCompleted: boolean;
-  whatsappChallenge: boolean;
-  hadWhatsapp: boolean | null;
 }): AuthUserSafe {
   return {
     id: args.id,
     phoneE164: args.phoneE164,
     phoneVerifiedAt: args.phoneVerifiedAt?.toISOString() ?? null,
     displayName: args.displayName,
-    businessName: args.businessName,
     email: args.email,
     isAdmin: args.isAdmin,
-    countryId: args.countryId,
-    currencyCode: args.currencyCode,
-    onboardingCompleted: args.onboardingCompleted,
-    whatsappChallenge: args.whatsappChallenge,
-    hadWhatsapp: args.hadWhatsapp,
   };
 }
 
@@ -167,14 +155,8 @@ export const authRegister = defineOperationFn("auth.register")
         phoneE164: phone.phoneE164,
         phoneVerifiedAt: null,
         displayName: user.displayName,
-        businessName: user.businessName,
         email: user.email,
         isAdmin: user.isAdmin,
-        countryId: user.countryId,
-        currencyCode: user.currencyCode,
-        onboardingCompleted: user.onboardingCompleted,
-        whatsappChallenge: user.whatsappChallenge,
-        hadWhatsapp: user.hadWhatsapp,
       }),
     };
   });
@@ -231,14 +213,8 @@ export const authVerifyPhone = defineOperationFn("auth.verifyPhone")
         phoneE164: phoneIdentity.phoneE164,
         phoneVerifiedAt: phoneIdentity.verifiedAt,
         displayName: phoneIdentity.user.displayName,
-        businessName: phoneIdentity.user.businessName,
         email: phoneIdentity.user.email,
         isAdmin: phoneIdentity.user.isAdmin,
-        countryId: phoneIdentity.user.countryId,
-        currencyCode: phoneIdentity.user.currencyCode,
-        onboardingCompleted: phoneIdentity.user.onboardingCompleted,
-        whatsappChallenge: phoneIdentity.user.whatsappChallenge,
-        hadWhatsapp: phoneIdentity.user.hadWhatsapp,
       }),
     };
   });
@@ -311,14 +287,8 @@ export const authLogin = defineOperationFn("auth.login")
         phoneE164: phoneIdentity.phoneE164,
         phoneVerifiedAt: phoneIdentity.verifiedAt ?? new Date(),
         displayName: phoneIdentity.user.displayName,
-        businessName: phoneIdentity.user.businessName,
         email: phoneIdentity.user.email,
         isAdmin: phoneIdentity.user.isAdmin,
-        countryId: phoneIdentity.user.countryId,
-        currencyCode: phoneIdentity.user.currencyCode,
-        onboardingCompleted: phoneIdentity.user.onboardingCompleted,
-        whatsappChallenge: phoneIdentity.user.whatsappChallenge,
-        hadWhatsapp: phoneIdentity.user.hadWhatsapp,
       }),
     };
   });
@@ -402,14 +372,8 @@ export const authVerifyLoginOtp = defineOperationFn("auth.verifyLoginOtp")
         phoneE164: refreshedPhoneIdentity.phoneE164,
         phoneVerifiedAt: refreshedPhoneIdentity.verifiedAt,
         displayName: refreshedPhoneIdentity.user.displayName,
-        businessName: refreshedPhoneIdentity.user.businessName,
         email: refreshedPhoneIdentity.user.email,
         isAdmin: refreshedPhoneIdentity.user.isAdmin,
-        countryId: refreshedPhoneIdentity.user.countryId,
-        currencyCode: refreshedPhoneIdentity.user.currencyCode,
-        onboardingCompleted: refreshedPhoneIdentity.user.onboardingCompleted,
-        whatsappChallenge: refreshedPhoneIdentity.user.whatsappChallenge,
-        hadWhatsapp: refreshedPhoneIdentity.user.hadWhatsapp,
       }),
     };
   });
@@ -520,14 +484,8 @@ export const authResetPassword = defineOperationFn("auth.resetPassword")
         phoneE164: phoneIdentity.phoneE164,
         phoneVerifiedAt: phoneIdentity.verifiedAt,
         displayName: phoneIdentity.user.displayName,
-        businessName: phoneIdentity.user.businessName,
         email: phoneIdentity.user.email,
         isAdmin: phoneIdentity.user.isAdmin,
-        countryId: phoneIdentity.user.countryId,
-        currencyCode: phoneIdentity.user.currencyCode,
-        onboardingCompleted: phoneIdentity.user.onboardingCompleted,
-        whatsappChallenge: phoneIdentity.user.whatsappChallenge,
-        hadWhatsapp: phoneIdentity.user.hadWhatsapp,
       }),
     };
   });
@@ -563,14 +521,8 @@ export const authMe = defineOperationFn("auth.me")
         phoneE164: phoneIdentity.phoneE164,
         phoneVerifiedAt: phoneIdentity.verifiedAt,
         displayName: ctx.user.displayName,
-        businessName: ctx.user.businessName,
         email: ctx.user.email,
         isAdmin: ctx.user.isAdmin,
-        countryId: ctx.user.countryId,
-        currencyCode: ctx.user.currencyCode,
-        onboardingCompleted: ctx.user.onboardingCompleted,
-        whatsappChallenge: ctx.user.whatsappChallenge,
-        hadWhatsapp: ctx.user.hadWhatsapp,
       }),
     };
   });

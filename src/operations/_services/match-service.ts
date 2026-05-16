@@ -94,7 +94,7 @@ export class MatchService extends AuraService {
       where: { targetId: userId },
       orderBy: { createdAt: "desc" },
       take: 50,
-      include: { requester: { select: { alias: true, bio: true, locationLabel: true } } },
+      include: { requester: { select: { alias: true } } },
     });
   }
 
@@ -103,7 +103,7 @@ export class MatchService extends AuraService {
       where: { requesterId: userId },
       orderBy: { createdAt: "desc" },
       take: 50,
-      include: { target: { select: { alias: true, bio: true, locationLabel: true } } },
+      include: { target: { select: { alias: true } } },
     });
   }
 

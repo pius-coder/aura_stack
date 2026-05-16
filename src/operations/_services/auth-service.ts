@@ -236,14 +236,23 @@ export class AuthService extends AuraService {
     return { userId: challenge.userId };
   }
 
-  async generateLinkCode(phoneE164: string) {
+  async generateLinkCode(phoneE164?: string) {
     const code = this.makeLinkCode();
     const expiresAt = new Date(Date.now() + 30 * 60 * 1000);
 
-    await this.db.auraPhoneIdentity.updateMany({
-      where: { phoneE164, userId: this.user?.id },
+    if (!this.user) throw new AuraError("UNAUTHORIZED", "Authentification requise.");
+
+    await this.db.auraUser.update({
+      where: { id: this.user.id },
       data: { linkCode: code, linkCodeExpiresAt: expiresAt },
     });
+
+    if (phoneE164) {
+      await this.db.auraPhoneIdentity.updateMany({
+        where: { phoneE164, userId: this.user.id },
+        data: { linkCode: code, linkCodeExpiresAt: expiresAt },
+      });
+    }
 
     return { code, expiresAt: expiresAt.toISOString() };
   }

@@ -1,11 +1,9 @@
-import { defineOperationFn } from "@/aura/server/operation";
+import { defineCronFn } from "@/aura/server/cron";
 import { MatchService } from "@/operations/_services/match-service";
 
-export default defineOperationFn("matches.expire-pending")
-  .mutate()
-  .entities(["Match"])
-  .internal()
-  .handler(async ({ ctx }) => {
+export default defineCronFn("matches.expire-pending")
+  .schedule("0 6 * * *")
+  .handler(async (ctx) => {
     const svc = new MatchService(ctx);
-    return svc.expirePending();
+    await svc.expirePending();
   });

@@ -154,9 +154,13 @@ describe("AuthService", () => {
 
   describe("generateLinkCode", () => {
     it("generates 8-char alphanumeric code", async () => {
-      let updated = false;
+      let userUpdated = false;
+      let phoneUpdated = false;
       const ctx = {
-        db: { auraPhoneIdentity: { updateMany: async () => { updated = true; } } },
+        db: {
+          auraUser: { update: async () => { userUpdated = true; } },
+          auraPhoneIdentity: { updateMany: async () => { phoneUpdated = true; } },
+        },
         user: { id: "user_1" },
       } as unknown as AuraContext;
 
@@ -164,7 +168,8 @@ describe("AuthService", () => {
       const result = await svc.generateLinkCode("+237600000001");
       expect(result.code).toHaveLength(8);
       expect(result.code).toMatch(/^[A-Z0-9]+$/);
-      expect(updated).toBe(true);
+      expect(userUpdated).toBe(true);
+      expect(phoneUpdated).toBe(true);
     });
   });
 });

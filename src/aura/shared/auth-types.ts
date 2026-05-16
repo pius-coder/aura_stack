@@ -9,14 +9,8 @@ export interface AuthUserSafe {
   phoneE164: string;
   phoneVerifiedAt: string | null;
   displayName: string | null;
-  businessName: string | null;
   email: string | null;
   isAdmin: boolean;
-  countryId: string | null;
-  currencyCode: string | null;
-  onboardingCompleted: boolean;
-  whatsappChallenge: boolean;
-  hadWhatsapp: boolean | null;
 }
 
 export interface AuthSessionResult {
