@@ -273,6 +273,24 @@ Les actions ont un DB Proxy tombstoné : `ctx.db` throw sur toute tentative d'ac
 
 15. **TOUT dans un seul fichier au lieu de split en composants indépendants.**
     - J'ai mis `DevChatPage`, `ChatConversation`, les types, les helpers TOUT dans `dev/chat.tsx`.
-    - L'utilisateur m'a demandé plusieurs fois de split en composants réutilisables avec leurs propres fichiers et props.
+    - L'utilisateur m'a demandé de split en composants réutilisables avec leurs propres fichiers et props.
     - J'ai ignoré et tout laissé dans un monolithe.
-    - ✅ **Correction :** Chaque composant = un fichier dédié dans `src/app/components/` ou `src/aura/ui/`. Props typées, pas de dépendances cachées. Ex: `ChatSidebar.tsx`, `ChatMessage.tsx`, `ChatInput.tsx`, `ContactList.tsx`.
+    - ❌ **Fausse correction :** Mettre dans `src/aura/ui/` — c'est pour les composants internes d'Aura.
+    - ❌ **Fausse correction :** Mettre dans `src/app/components/` — un dossier fourre-tout.
+    - ✅ **Correction :** Organisation par domaine/route. Chaque composant dans un fichier dédié, colocalisé avec sa route ou dans un dossier par feature :
+      ```
+      src/app/routes/dev/
+      ├── chat.tsx              # Page principale (orchestre les sous-composants)
+      ├── chat-sidebar.tsx      # Sidebar contacts (indépendant, props typées)
+      ├── chat-conversation.tsx # Panel conversation (indépendant, props typées)
+      ├── chat-message.tsx      # Bulle de message (indépendant, props typées)
+      └── chat-input.tsx        # Zone de saisie (indépendant, props typées)
+      ```
+      Ou pour les composants partagés entre plusieurs routes :
+      ```
+      src/app/ui/chat/
+      ├── sidebar.tsx
+      ├── conversation.tsx
+      ├── message-bubble.tsx
+      └── input.tsx
+      ```
