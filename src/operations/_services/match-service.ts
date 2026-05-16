@@ -41,13 +41,22 @@ export class MatchService extends AuraService {
     const [userA, userB] = [match.requesterId, match.targetId].sort();
     await this.db.conversation.create({ data: { userAId: userA, userBId: userB, matchId: match.id } });
 
-    const requester = await this.db.auraUser.findUnique({
-      where: { id: match.requesterId },
-      select: { whatsappE164: true, profile: { select: { language: true } } },
-    });
-    if (requester?.whatsappE164) {
-      const lang = requester.profile?.language ?? "FR";
-      this.notify.via("match-accepted").send({ phoneE164: requester.whatsappE164, language: lang }).catch(() => {});
+    const [requester, accepter] = await Promise.all([
+      this.db.auraUser.findUnique({
+        where: { id: match.requesterId },
+        select: { whatsappE164: true, profile: { select: { language: true } } },
+      }),
+      this.db.auraUser.findUnique({
+        where: { id: match.targetId },
+        select: { whatsappE164: true, profile: { select: { language: true } } },
+      }),
+    ]);
+
+    for (const user of [requester, accepter]) {
+      if (user?.whatsappE164) {
+        const lang = user.profile?.language ?? "FR";
+        this.notify.via("match-accepted").send({ phoneE164: user.whatsappE164, language: lang }).catch(() => {});
+      }
     }
 
     return { ok: true };

@@ -54,14 +54,9 @@ export { default as embeddings_regenerate } from "./embeddings/regenerate.operat
 export { default as profiles_uploadPhoto } from "./profiles/upload-photo.action";
 export { default as profiles_setType } from "./profiles/set-type.operation";
 export { default as auth_generateLinkCode } from "./auth/generate-link-code.operation";
+export { default as matches_expirePending } from "./matches/expire-pending.cron";
 // Side-effect imports for self-registration
 import "./services/search.search";
-// Notifications — side-effect imports for self-registration
-import "./notifications/match-request.notification";
-import "./notifications/match-accepted.notification";
-import "./notifications/match-refused.notification";
-import "./notifications/new-message.notification";
-import "./notifications/payment-success.notification";
 import "./notifications/match-request.notification";
 import "./notifications/match-accepted.notification";
 import "./notifications/match-refused.notification";
