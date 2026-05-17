@@ -2,7 +2,7 @@ import { defineOperationFn } from "@/aura/server/operation";
 import { z } from "zod";
 import { ChatService } from "@/operations/_services/chat-service";
 
-export default defineOperationFn("chat.send-message")
+export default defineOperationFn("conversations.send-message")
   .mutate()
   .input(z.object({ conversationId: z.string(), body: z.string().min(1).max(4000) }))
   .entities(["ChatMessage", "Conversation"])

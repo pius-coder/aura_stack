@@ -20,6 +20,7 @@ import { auraServerOnlyPlugin } from "./src/aura/server/vite-server-only-plugin"
  */
 const config = defineConfig({
   resolve: { tsconfigPaths: true },
+  server: { allowedHosts: ["orya.globalimex.online"] },
   plugins: [
     // Enforce server-only boundary - must run before bundlers
     auraServerOnlyPlugin(),

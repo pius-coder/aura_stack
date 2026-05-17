@@ -18,6 +18,7 @@ import { publishInvalidation } from "../invalidate";
 import { v4 as uuidv4 } from "uuid";
 import { toPrismaJson } from "../json";
 import type { OperationRef } from "@/aura/core/types";
+import type { AuraContext } from "../context";
 
 // ─── Types ───
 
@@ -25,7 +26,7 @@ export interface AgentToolDef {
   name: string;
   description: string;
   parameters: z.ZodType;
-  execute: (input: unknown) => Promise<unknown>;
+  execute: (input: unknown, ctx?: AuraContext) => Promise<unknown>;
   requiresApproval?: boolean;
 }
 
@@ -126,16 +127,16 @@ export function operationAsTool(
   return {
     name: ref._name,
     description: opts.description,
-    parameters: z.record(z.unknown()), // Runtime: actual schema resolved from registry
+    parameters: z.record(z.unknown()),
     requiresApproval: opts.requiresApproval,
-    async execute(input) {
-      // In-process call through the registry
+    async execute(input, ctx) {
       const { getOperation } = await import("../registry");
       const op = getOperation(ref._name);
       if (!op) throw new Error(`Operation not found: ${ref._name}`);
+      if (ctx) return op.execute({ ctx, input, params: undefined, req: undefined });
       const { createAuraContext } = await import("../create-context");
-      const ctx = await createAuraContext({ source: "internal", requestId: uuidv4() });
-      return op.execute({ ctx, input, params: undefined, req: undefined });
+      const fresh = await createAuraContext({ source: "internal", requestId: uuidv4() });
+      return op.execute({ ctx: fresh, input, params: undefined, req: undefined });
     },
   };
 }
@@ -165,6 +166,7 @@ export async function generateText(
   agentName: string,
   options: GenerateTextOptions,
   prisma: AuraDb = db,
+  ctx?: AuraContext,
 ): Promise<{ content: string; messageId: string; usage?: { inputTokens: number; outputTokens: number } }> {
   const agent = agentRegistry.get(agentName);
   if (!agent) throw new Error(`Agent not found: ${agentName}`);
@@ -241,7 +243,7 @@ export async function generateText(
         return { content: `En attente d'approbation pour l'action: ${tc.name}`, messageId: msgId };
       }
 
-      const result = await toolDef.execute(tc.args);
+      const result = await toolDef.execute(tc.args, ctx);
       messages.push(new ToolMessage({ content: JSON.stringify(result), tool_call_id: tc.id! }));
 
       // Persist tool call + result

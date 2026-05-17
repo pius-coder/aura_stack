@@ -2,7 +2,7 @@ import { defineOperationFn } from "@/aura/server/operation";
 import { z } from "zod";
 import { AuthService } from "@/operations/_services/auth-service";
 
-export default defineOperationFn("auth.generate-link-code")
+export default defineOperationFn("users.generate-link-code")
   .mutate()
   .input(z.object({ phoneE164: z.string() }))
   .entities(["AuraPhoneIdentity"])

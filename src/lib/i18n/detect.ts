@@ -22,8 +22,24 @@ const EN_TERMS = [
 ];
 
 export function detectLanguage(text: string, threshold = 0.2): DetectedLanguage {
+  return detectLanguageDetailed(text, threshold).language;
+}
+
+export function detectLanguageDetailed(text: string, threshold = 0.2): {
+  language: DetectedLanguage;
+  confidence: number;
+  frScore: number;
+  enScore: number;
+} {
   const trimmed = text.trim().slice(0, 500);
-  if (trimmed.length < 3) return "UNKNOWN";
+  if (trimmed.length < 3) {
+    return {
+      language: "UNKNOWN",
+      confidence: 0,
+      frScore: 0,
+      enScore: 0,
+    };
+  }
 
   const frHits = FR_TERMS.filter((p) => p.test(trimmed)).length;
   const enHits = EN_TERMS.filter((p) => p.test(trimmed)).length;
@@ -32,6 +48,19 @@ export function detectLanguage(text: string, threshold = 0.2): DetectedLanguage 
   const enScore = enHits / EN_TERMS.length;
 
   const max = Math.max(frScore, enScore);
-  if (max < threshold) return "UNKNOWN";
-  return frScore >= enScore ? "FR" : "EN";
+  if (max < threshold) {
+    return {
+      language: "UNKNOWN",
+      confidence: max,
+      frScore,
+      enScore,
+    };
+  }
+
+  return {
+    language: frScore >= enScore ? "FR" : "EN",
+    confidence: max,
+    frScore,
+    enScore,
+  };
 }

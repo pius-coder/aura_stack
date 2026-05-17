@@ -2,7 +2,7 @@ import { defineOperationFn } from "@/aura/server/operation";
 import { z } from "zod";
 import { AuraError } from "@/aura/core/errors";
 
-export default defineOperationFn("chat.mark-read")
+export default defineOperationFn("conversations.mark-read")
   .mutate()
   .input(z.object({ conversationId: z.string() }))
   .entities(["ChatMessage"])

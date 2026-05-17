@@ -2,13 +2,14 @@
 
 ## Introduction
 
-Ce document décrit l'architecture technique de la **WhatsApp AI Matchmaking Platform** construite sur le framework Aura (TanStack Start + Hono + Prisma + PostgreSQL/pgvector + Aura Broadcast WebSocket). Il couvre les 50 requirements du document `requirements.md` regroupés en 7 sections : Métier (R1-10), Bot WhatsApp et Persona (R11-16), Graph RAG IA (R17-23), Chat Anonyme et Double Opt-in (R24-27), Paiements et Monétisation (R28-34), Sécurité et Conformité (R35-40), Performances et Observabilité (R41-50).
+Ce document décrit l'architecture technique de la **WhatsApp AI Matchmaking Platform** construite sur le framework Aura (TanStack Start + Hono + Prisma + PostgreSQL/pgvector + Aura Broadcast WebSocket). Il couvre les 52 requirements du document `requirements.md` regroupés en 8 sections : Métier (R1-10), Bot WhatsApp et Persona (R11-16), Graph RAG IA (R17-23), Chat Anonyme et Double Opt-in (R24-27), Paiements et Monétisation (R28-34), Sécurité et Conformité (R35-40), Performances et Observabilité (R41-50), Simulation & Cohérence de pipeline (R51-R52).
 
-La plateforme se distingue par **trois choix architecturaux structurants** qui irriguent l'ensemble du design :
+La plateforme se distingue par **quatre choix architecturaux structurants** qui irriguent l'ensemble du design :
 
 1. **Une instance LangGraph par utilisateur** plutôt qu'un agent monolithique partagé. Chaque utilisateur lié à WhatsApp possède son propre `Graphe_Agent_User`, persisté via le checkpointer PostgreSQL natif d'Aura. Cela isole les états conversationnels, simplifie l'observabilité par utilisateur et permet d'évoluer vers des personas différenciées (par segment, par région) sans refonte.
 2. **Un orchestrateur de matching séparé** des agents de conversation. L'`Orchestrateur_Matching` est un graphe LangGraph indépendant invoqué via tool calling depuis l'agent utilisateur. Cette séparation permet d'optimiser indépendamment les latences (l'orchestrateur cible 800 ms p95 sur le traversal, 300 ms p95 sur la similarité vectorielle), de paralléliser les composants Graph et Vector, et de mettre en cache les résultats dans Redis avec TTL 60 s.
 3. **Un Knowledge Graph relationnel hybride** stocké directement en PostgreSQL plutôt que dans une base graphe dédiée. Les entités (`User`, `Service`, `Skill`, `Location`, `Industry`, `Need`) et leurs relations typées (`PROVIDES`, `REQUIRES`, `LOCATED_IN`, `LOOKS_FOR`, `MATCHES`, `CONNECTED_TO`, `RATED`) sont stockées dans deux tables `entities` et `relations` exploitées par CTE récursives pour le traversal. Les embeddings vivent dans `graph_embeddings` (pgvector, HNSW, 1536 dimensions). Le matching final fusionne les deux signaux par **Reciprocal Rank Fusion (RRF)** suivi d'un module de diversité (Diversity_Mix) qui mixe profils très compatibles et profils complémentaires.
+4. **Une stratégie simulation-first avec pipeline unique**. Le Bot_WhatsApp, le chat Orya du dashboard et le `Dev_Sandbox_Orya_Lab` passent tous par le même `UserAgentService`, les mêmes prompts versionnés, les mêmes contrats métier (`CanonicalWhatsAppMessage`, `OryaIntent`, `OryaTurnResult`) et le même moteur de matching retrieval-first.
 
 Le design s'appuie systématiquement sur les primitives du framework Aura (cf. `.kiro/specs/aura-hono-tanstack-migration/design.md`) : `defineOperationFn` (queries, mutations, actions), `defineAgent`, `defineWorkflow`, `defineHttpAction`, `defineVectorIndex`, `defineSearchIndex`, `ctx.scheduler`, `ctx.storage`, broadcast WebSocket, components `@aura/auth`, `@aura/storage`, `@aura/notifications`, `@aura/rate-limit`, et le pattern `AuraService` (Decision 26). Les conventions kebab-case et la structure `src/operations/{domain}/{name}.{kind}.ts` sont appliquées partout.
 
@@ -101,14 +102,16 @@ Tout au long du document, la notation **R<n>** ou **R<n>.<m>** renvoie au requir
        │              ▼                                 ▼                 │
        │   ┌────────────────────────────────────────────────────────┐    │
        │   │        Webhook_WhatsApp (Hono handler + HMAC)          │    │
-       │   │   1. Validation signature  2. Queue Redis  3. ACK      │    │
+       │   │   1. Validation signature  2. Inbox canonique          │    │
+       │   │   3. Scheduler process-incoming 4. ACK                 │    │
        │   └──────────────────┬─────────────────────────────────────┘    │
        │                      │ enqueue                                   │
        │                      ▼                                            │
        │   ┌────────────────────────────────────────────────────────┐    │
-       │   │   Worker WhatsApp (Aura Outbox + Scheduler)            │    │
+       │   │   Worker WhatsApp (Aura Scheduler + InboxService)      │    │
        │   │   Pour chaque message:                                 │    │
-       │   │     ├─▶ resolve user_id par phone_e164                 │    │
+       │   │     ├─▶ relit CanonicalWhatsAppMessage                 │    │
+       │   │     ├─▶ traite link_code avant résolution user         │    │
        │   │     └─▶ invoke Graphe_Agent_User[user_id]              │    │
        │   └──────────────────┬─────────────────────────────────────┘    │
        │                      │                                            │
@@ -175,7 +178,7 @@ Tout au long du document, la notation **R<n>** ou **R<n>.<m>** renvoie au requir
 
 | Source | Endpoint Hono | Mécanisme | Destination |
 |--------|---------------|-----------|-------------|
-| Message WhatsApp utilisateur | `POST /webhooks/whatsapp` (`defineHttpAction`) | HMAC validation → enqueue Redis | `Graphe_Agent_User[user_id]` |
+| Message WhatsApp utilisateur | `POST /webhooks/whatsapp` (`defineHttpAction`) | HMAC validation → `WhatsappInbox` canonique → scheduler `agent.process-incoming` | `Graphe_Agent_User[user_id]` |
 | Webhook paiement Fapshi | `POST /webhooks/fapshi` (`defineHttpAction`) | HMAC validation → idempotence par `provider_trans_id` | Activation produit + Notification_WhatsApp |
 | Webhook paiement Flutterwave (phase 3) | `POST /webhooks/flutterwave` | HMAC + idempotence | Idem |
 | Inscription / mutation Dashboard | `POST /aura/*` (bridge Aura) | CSRF + auth Aura | Operation `users.*`, `services.*`, etc. |
@@ -255,8 +258,8 @@ Implémenté comme `defineHttpAction("/webhooks/whatsapp", "POST")` (cf. Aura de
 1. **Validation HMAC** de la signature Evolution_API (`X-Evolution-Signature`) ou Meta (`X-Hub-Signature-256`).
 2. **Parse strict** via `parseWhatsAppMessage` (cf. R48) — le payload brut est conservé en `whatsapp_inbox` pendant 30 jours pour debug.
 3. **Idempotence** par `messages.providerMessageId` (clé unique).
-4. **Enqueue** dans Redis (liste `whatsapp:incoming:{user_id}`) et **ACK 200 immédiat** (sous 200 ms) pour éviter les retries Evolution_API.
-5. Le worker consomme la queue et invoque `Graphe_Agent_User[user_id]`.
+4. **Persistance** du payload canonique dans `WhatsappInbox` avec idempotence par `providerMessageId`.
+5. **Planification** immédiate de `agent.process-incoming` via `ctx.scheduler.runAfter(0, ...)`, puis **ACK 200 immédiat** (sous 200 ms) pour éviter les retries Evolution_API.
 
 #### Sortie messages (Evolution_API client)
 
@@ -308,9 +311,9 @@ La couche `WhatsAppGateway` rend l'application aveugle à l'implémentation : se
 
 ### Couche 2 — Instance IA (Graphe_Agent_User)
 
-**Responsabilité** : pour chaque utilisateur lié, exécuter le tour conversationnel WhatsApp avec une persona stricte (R11), un dialogue multilingue (R12), une hydratation contextuelle (R13), une détection d'intention de matching (R14) et une présentation des résultats (R15).
+**Responsabilité** : pour chaque utilisateur lié, exécuter le tour conversationnel avec une persona hybride et adaptative (R11), un dialogue multilingue (R12), une hydratation contextuelle (R13), une détection d'intention de matching (R14) et une présentation des résultats (R15). Cette couche sert à la fois le webhook WhatsApp, le chat Orya web et le labo de simulation.
 
-**Service** : `UserAgentService` (`src/operations/_services/user-agent-service.ts`) → étend `AuraService`, expose `processMessage(userId, text): reply`, `createThread(userId): threadRef`. Utilise `ctx.agent.generateText()` en interne.
+**Service** : `UserAgentService` (`src/operations/_services/user-agent-service.ts`) → étend `AuraService`, expose `processMessage(userId, text): reply`, `processMessageWithTrace(userId, text)` et `processTurn(userId, text): OryaTurnResult`. Utilise `ctx.agent.generateText()` en interne et sert `agent.chat-with-orya`, `agent.chat-dev` et `InboxService`.
 
 ```
 ┌────────────────────────────────────────────────────────────────┐
@@ -360,9 +363,35 @@ Le détail des nodes (contrats, prompts, transitions) est en section **Conceptio
 
 ---
 
+### Couche 2 bis — Dev Sandbox / Orya Lab
+
+**Responsabilité** : fournir une surface de validation manuelle multi-profils sans WhatsApp réel, tout en réutilisant les mêmes services métier que la production. Cette couche répond à R51-R52 et évite toute divergence entre les démonstrations et le pipeline réel.
+
+**Service** : `DevLabService` (`src/operations/_services/dev-lab-service.ts`) → étend `AuraService`, expose `chat(phoneE164, text)`, `getState(phoneE164)`, `actOnMatch(phoneE164, matchId, action)` et `sendConversationMessage(phoneE164, conversationId, body)`.
+
+```
+┌────────────────────────────────────────────────────────────────┐
+│ Dev_Sandbox_Orya_Lab                                          │
+│                                                                │
+│   profils seedes  ──▶ agent.chat-dev ──▶ UserAgentService      │
+│          │                              │                      │
+│          │                              ├─▶ MatchingService    │
+│          │                              ├─▶ MatchService       │
+│          │                              └─▶ ChatService        │
+│          │                                                     │
+│          └──────────────▶ agent.dev-lab-state                  │
+│                              retourne: profil, matchs,         │
+│                              conversations, événements, trace   │
+└────────────────────────────────────────────────────────────────┘
+```
+
+Les opérations du labo sont `public()` mais strictement réservées aux environnements non production ; elles doivent lever `AuraError("FORBIDDEN")` si `NODE_ENV === "production"`.
+
+---
+
 ### Couche 3 — Orchestrateur Matching
 
-**Responsabilité** : résoudre une requête de mise en relation par fusion Graph_Traversal + Embedding_Query, application de Diversity_Mix, filtrage et caching Redis. Indépendant de la couche conversationnelle pour pouvoir être optimisé seul (latence cible 1-2 s p95, R41).
+**Responsabilité** : résoudre une requête de mise en relation par fusion Graph_Traversal + Embedding_Query, application de Diversity_Mix, filtrage et caching Redis. Indépendant de la couche conversationnelle pour pouvoir être optimisé seul (latence cible 1-2 s p95, R41). Le moteur reste **retrieval-first** : le ranking métier est produit ici, puis seulement reformulé par l'agent utilisateur.
 
 **Service** : `MatchingService` (`src/operations/_services/matching-service.ts`) → étend `AuraService`, expose `findMatches(requesterId, constraints): MatchingResult`. Utilise `this.paginate()`, `this.runQuery()`, et le Knowledge Graph. Appelé par `UserAgentService` via tool call.
 
@@ -4109,4 +4138,3 @@ tests/perf/
 Outils : `autocannon` pour HTTP, `mitata` pour micro-benchmarks.
 
 ---
-

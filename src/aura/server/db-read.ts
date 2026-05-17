@@ -53,6 +53,6 @@ export function defineDbReadFn<
     return parsedOutput.data as TOutput;
   }) as DbReadFn<TInput, TOutput>;
 
-  Object.assign(fn, { __auraDbRead: true as const, name: args.name });
+  (fn as unknown as Record<string, unknown>).__auraDbRead = true;
   return fn;
 }

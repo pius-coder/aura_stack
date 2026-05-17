@@ -1,6 +1,6 @@
 import { defineOperationFn } from "@/aura/server/operation";
 
-export default defineOperationFn("chat.list-conversations")
+export default defineOperationFn("conversations.list-mine")
   .query()
   .entities(["Conversation"])
   .auth()

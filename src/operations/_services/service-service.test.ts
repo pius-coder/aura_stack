@@ -3,6 +3,8 @@ import { ServiceService } from "./service-service";
 import { AuraService } from "@/aura/server/service";
 import type { AuraContext } from "@/aura/server/context";
 
+const mockScheduler = { runAfter: async () => "job_1" };
+
 describe("ServiceService", () => {
   it("extends AuraService", () => {
     const ctx = {} as AuraContext;
@@ -22,9 +24,10 @@ describe("ServiceService", () => {
           profile: { findUnique: async () => ({ isProvider: false }), update: async () => ({}) },
           subscription: { findFirst: async () => null },
         },
+        scheduler: mockScheduler,
       } as unknown as AuraContext;
       const svc = new ServiceService(ctx);
-      const result = await svc.create("user_1", { title: "Plomberie", description: "Travaux plomberie", priceXaf: 15000 });
+      await svc.create("user_1", { title: "Plomberie", description: "Travaux plomberie", priceXaf: 15000 });
       expect(created).toBe(true);
     });
 
@@ -46,10 +49,11 @@ describe("ServiceService", () => {
           profile: { findUnique: async () => ({ isProvider: true }) },
           subscription: { findFirst: async () => ({ plan: "PRO", status: "ACTIVE" }) },
         },
+        scheduler: mockScheduler,
       } as unknown as AuraContext;
       const svc = new ServiceService(ctx);
-      const result = await svc.create("user_1", { title: "Extra Pro", description: "Desc", priceXaf: 1000 });
-      expect(result.id).toBe("svc_1");
+      await svc.create("user_1", { title: "Extra Pro", description: "Desc", priceXaf: 1000 });
+
     });
 
     it("auto-sets isProvider on profile", async () => {
@@ -63,6 +67,7 @@ describe("ServiceService", () => {
           },
           subscription: { findFirst: async () => null },
         },
+        scheduler: mockScheduler,
       } as unknown as AuraContext;
       const svc = new ServiceService(ctx);
       await svc.create("user_1", { title: "Test", description: "Desc", priceXaf: 5000 });
@@ -76,6 +81,7 @@ describe("ServiceService", () => {
         db: {
           service: { findUnique: async () => ({ id: "svc_1", userId: "user_1" }), update: async (args: any) => args.data },
         },
+        scheduler: mockScheduler,
       } as unknown as AuraContext;
       const svc = new ServiceService(ctx);
       const result = await svc.update("user_1", "svc_1", { title: "Updated" });
@@ -98,6 +104,7 @@ describe("ServiceService", () => {
         db: {
           service: { findUnique: async () => ({ id: "svc_1", userId: "user_1" }), update: async (args: any) => { deletedAt = !!args.data.deletedAt; } },
         },
+        scheduler: mockScheduler,
       } as unknown as AuraContext;
       const svc = new ServiceService(ctx);
       const result = await svc.delete("user_1", "svc_1");

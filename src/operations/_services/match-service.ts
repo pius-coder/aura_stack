@@ -107,6 +107,29 @@ export class MatchService extends AuraService {
     });
   }
 
+  async listMine(userId: string) {
+    const [incoming, outgoing] = await Promise.all([
+      this.db.match.findMany({
+        where: { targetId: userId },
+        orderBy: { createdAt: "desc" },
+        take: 50,
+        include: { requester: { select: { alias: true } } },
+      }),
+      this.db.match.findMany({
+        where: { requesterId: userId },
+        orderBy: { createdAt: "desc" },
+        take: 50,
+        include: { target: { select: { alias: true } } },
+      }),
+    ]);
+    const tagged = [
+      ...incoming.map(m => ({ ...m, isIncoming: true as const })),
+      ...outgoing.map(m => ({ ...m, isIncoming: false as const })),
+    ];
+    tagged.sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime());
+    return tagged.slice(0, 50);
+  }
+
   async expirePending() {
     const cutoff = new Date(Date.now() - 14 * 24 * 60 * 60 * 1000);
     const result = await this.db.match.updateMany({

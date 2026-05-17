@@ -1,5 +1,6 @@
 import { AuraService } from "@/aura/server/service";
 import { AuraError } from "@/aura/core/errors";
+import { api } from "@/aura/_generated/api";
 
 const MAX_SERVICES_FREE_TIER = 50;
 
@@ -39,6 +40,7 @@ export class ServiceService extends AuraService {
       await this.db.profile.update({ where: { userId }, data: { isProvider: true } });
     }
 
+    this.scheduler.runAfter(0, api.graph["upsert-entity"], { userId, type: "SERVICE", value: input.title, source: "DASHBOARD" }).catch(() => {});
     return service;
   }
 
@@ -53,14 +55,17 @@ export class ServiceService extends AuraService {
     const svc = await this.db.service.findUnique({ where: { id } });
     if (!svc || svc.userId !== userId) throw new AuraError("NOT_FOUND", "Service introuvable.");
 
-    return this.db.service.update({ where: { id }, data: input });
+    const result = await this.db.service.update({ where: { id }, data: input });
+    this.scheduler.runAfter(0, api.graph["upsert-entity"], { userId, type: "SERVICE", value: result.title, source: "DASHBOARD" }).catch(() => {});
+    return result;
   }
 
-  async toggle(userId: string, id: string) {
+  async deactivate(userId: string, id: string) {
     const svc = await this.db.service.findUnique({ where: { id } });
     if (!svc || svc.userId !== userId) throw new AuraError("NOT_FOUND", "Service introuvable.");
+    if (!svc.isActive) return svc;
 
-    return this.db.service.update({ where: { id }, data: { isActive: !svc.isActive } });
+    return this.db.service.update({ where: { id }, data: { isActive: false } });
   }
 
   async delete(userId: string, id: string) {
@@ -68,6 +73,7 @@ export class ServiceService extends AuraService {
     if (!svc || svc.userId !== userId) throw new AuraError("NOT_FOUND", "Service introuvable.");
 
     await this.db.service.update({ where: { id }, data: { deletedAt: new Date() } });
+    this.scheduler.runAfter(0, api.graph["upsert-entity"], { userId, type: "SERVICE", value: svc.title, source: "DASHBOARD" }).catch(() => {});
     return { ok: true };
   }
 

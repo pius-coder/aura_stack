@@ -424,6 +424,16 @@ enum KnowledgeEntityType {
   USER
 }
 
+enum KnowledgeEntityStatus {
+  ACTIVE
+  PENDING_REVIEW
+}
+
+enum KnowledgeSource {
+  CONVERSATION
+  DASHBOARD
+}
+
 enum KnowledgeRelationPredicate {
   PROVIDES
   REQUIRES
@@ -569,21 +579,24 @@ model Dispute {
 }
 
 model KnowledgeEntity {
-  id          String              @id @default(cuid())
+  id          String                @id @default(cuid())
   userId      String
   type        KnowledgeEntityType
   value       String
-  confidence  Float               @default(0.5)
+  confidence  Float                 @default(0.5)
+  status      KnowledgeEntityStatus @default(ACTIVE)
+  source      KnowledgeSource       @default(CONVERSATION)
   metadata    Json?
   embeddingId String?
-  createdAt   DateTime            @default(now())
-  updatedAt   DateTime            @updatedAt
-  relations   KnowledgeRelation[] @relation("SourceEntity")
-  targetOf    KnowledgeRelation[] @relation("TargetEntity")
+  createdAt   DateTime              @default(now())
+  updatedAt   DateTime              @updatedAt
+  relations   KnowledgeRelation[]   @relation("SourceEntity")
+  targetOf    KnowledgeRelation[]   @relation("TargetEntity")
   embedding   GraphEmbedding?
 
   @@index([userId, type])
   @@index([type, value])
+  @@index([status])
 }
 
 model KnowledgeRelation {
@@ -592,14 +605,18 @@ model KnowledgeRelation {
   targetId  String
   predicate KnowledgeRelationPredicate
   strength  Float                       @default(0.5)
+  source    KnowledgeSource             @default(CONVERSATION)
   createdAt DateTime                    @default(now())
   updatedAt DateTime                    @updatedAt
-  source    KnowledgeEntity             @relation("SourceEntity", fields: [sourceId], references: [id], onDelete: Cascade)
-  target    KnowledgeEntity             @relation("TargetEntity", fields: [targetId], references: [id], onDelete: Cascade)
+  sourceEntity KnowledgeEntity          @relation("SourceEntity", fields: [sourceId], references: [id], onDelete: Cascade)
+  targetEntity KnowledgeEntity          @relation("TargetEntity", fields: [targetId], references: [id], onDelete: Cascade)
 
+  @@unique([sourceId, targetId, predicate])
   @@index([sourceId])
   @@index([targetId])
   @@index([predicate])
+  @@index([predicate, sourceId])
+  @@index([predicate, targetId])
 }
 
 model GraphEmbedding {

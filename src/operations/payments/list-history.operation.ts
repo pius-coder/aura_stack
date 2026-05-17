@@ -1,11 +1,13 @@
 import { defineOperationFn } from "@/aura/server/operation";
-import { z } from "zod";
 
-export default defineOperationFn("payments.get-status")
+export default defineOperationFn("payments.list-history")
   .query()
-  .input(z.object({ paymentId: z.string() }))
   .entities(["Payment"])
   .auth()
-  .handler(async ({ ctx, input }) => {
-    return ctx.db.payment.findFirst({ where: { id: input.paymentId, userId: ctx.user.id } });
+  .handler(async ({ ctx }) => {
+    return ctx.db.payment.findMany({
+      where: { userId: ctx.user.id },
+      orderBy: { createdAt: "desc" },
+      take: 50,
+    });
   });

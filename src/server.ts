@@ -46,6 +46,7 @@ function createServerEntry(entry: ServerEntry): ServerEntry {
       // - /health — Health check endpoint
       if (
         url.pathname.startsWith("/aura/") ||
+        url.pathname.startsWith("/aura-http/") ||
         url.pathname.startsWith("/aura-internal/") ||
         url.pathname.startsWith("/files/") ||
         url.pathname === "/health"

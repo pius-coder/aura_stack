@@ -48,6 +48,10 @@ describe("AuthService", () => {
     it("creates user with email and password", async () => {
       const ctx = {
         db: {
+          auraPhoneIdentity: {
+            findUnique: async () => null,
+            create: async (args: any) => ({ id: "pi_1", ...args.data }),
+          },
           auraUser: {
             findUnique: async () => null,
             create: async (args: any) => ({
@@ -67,23 +71,27 @@ describe("AuthService", () => {
       } as unknown as AuraContext;
 
       const svc = new AuthService(ctx);
-      const result = await svc.register({ email: "test@orya.com", password: "Str0ng!Pass12", displayName: "Test User" });
+      const result = await svc.register({ phoneE164: "+237600000001", email: "test@orya.com", password: "Str0ng!Pass12", displayName: "Test User" });
 
       expect(result.userId).toBe("user_1");
-      expect(result.email).toBe("test@orya.com");
+      expect(result.phoneE164).toBe("+237600000001");
       expect(result.linkCode).toBeDefined();
       expect(result.linkCode).toHaveLength(8);
     });
 
-    it("throws CONFLICT on duplicate email", async () => {
+    it("throws CONFLICT on duplicate phone", async () => {
       const ctx = {
-        db: { auraUser: { findUnique: async () => ({ id: "existing" }) } },
+        db: {
+          auraPhoneIdentity: {
+            findUnique: async () => ({ id: "existing" }),
+          },
+        },
         bump: { success: vi.fn() },
         audit: { record: vi.fn() },
       } as unknown as AuraContext;
 
       const svc = new AuthService(ctx);
-      await expect(svc.register({ email: "dup@orya.com", password: "Str0ng!Pass12" })).rejects.toThrow("Email ou mot de passe invalide.");
+      await expect(svc.register({ phoneE164: "+237600000002", email: "dup@orya.com", password: "Str0ng!Pass12" })).rejects.toThrow("Ce numéro est déjà utilisé.");
     });
   });
 

@@ -1,11 +1,11 @@
 import { defineOperationFn } from "@/aura/server/operation";
 import { z } from "zod";
 
-export default defineOperationFn("ratings.list-for-user")
+export default defineOperationFn("ratings.stats-by-user")
   .query()
   .input(z.object({ userId: z.string() }))
   .entities(["Rating"])
-  .public()
+  .auth()
   .handler(async ({ ctx, input }) => {
     return ctx.db.rating.findMany({
       where: { rateeId: input.userId },

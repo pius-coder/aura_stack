@@ -1,35 +1,28 @@
 import { createFileRoute, Link } from '@tanstack/react-router'
-import { VibeLayout } from '@/aura/ui/vibe-layout'
-import { VibeWhatsAppMockup } from '@/aura/ui/vibe-whatsapp-mockup'
+import { Button } from '@/aura/ui/button'
+import { VibeIphoneMockup } from '@/aura/ui/vibe-iphone-mockup'
 
 export const Route = createFileRoute('/demo')({ component: DemoPage })
 
 function DemoPage() {
   return (
-    <VibeLayout>
-      <section className="mx-auto grid w-full max-w-6xl gap-12 px-5 pb-20 pt-16 sm:px-8 sm:pt-24 lg:grid-cols-[1.1fr_0.9fr]">
-        <div className="flex flex-col justify-center">
-          <span className="vibe-pill self-start">Démo publique</span>
-          <h1 className="vibe-display mt-5 text-4xl sm:text-5xl">
-            Testez l'assistant <span className="text-[var(--vibe-accent)]">avant de vous inscrire.</span>
-          </h1>
-          <p className="mt-5 max-w-lg text-base text-[var(--vibe-fg-muted)]">
-            La démo arrive avec la vague IA. En attendant, voici à quoi
-            ressemblera votre conversation WhatsApp avec Vibe.
-          </p>
-          <div className="mt-8 flex flex-col gap-3 sm:flex-row">
-            <Link to="/sign-up" className="vibe-cta">
-              Créer mon compte
-            </Link>
-            <Link to="/" className="vibe-cta-ghost">
-              Retour à l'accueil
-            </Link>
-          </div>
+    <div className="mx-auto flex max-w-5xl flex-col items-center gap-8 px-4 py-16 md:flex-row md:gap-12">
+      <div className="flex-1">
+        <p className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground">Demo</p>
+        <h1 className="mt-2 text-2xl font-black tracking-tight">
+          Testez l'assistante avant de vous inscrire.
+        </h1>
+        <p className="mt-2 text-sm text-muted-foreground">
+          Voici a quoi ressemble une conversation avec Orya, votre assistante Orya.
+        </p>
+        <div className="mt-5 flex gap-2">
+          <Link to="/sign-up"><Button>Creer mon compte</Button></Link>
+          <Link to="/"><Button variant="outline">Retour</Button></Link>
         </div>
-        <div className="flex justify-center lg:justify-end">
-          <VibeWhatsAppMockup className="w-full max-w-[380px]" />
-        </div>
-      </section>
-    </VibeLayout>
+      </div>
+      <div className="shrink-0">
+        <VibeIphoneMockup />
+      </div>
+    </div>
   )
 }

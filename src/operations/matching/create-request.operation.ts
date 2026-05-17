@@ -3,7 +3,7 @@ import { z } from "zod";
 import { MatchService } from "@/operations/_services/match-service";
 import withProQuota from "@/operations/_middleware/with-pro-quota.middleware";
 
-export default defineOperationFn("matches.create")
+export default defineOperationFn("matching.create-request")
   .mutate()
   .input(z.object({ targetUserId: z.string(), originSessionId: z.string().optional() }))
   .entities(["Match"])

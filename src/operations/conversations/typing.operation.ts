@@ -2,8 +2,8 @@ import { defineOperationFn } from "@/aura/server/operation";
 import { z } from "zod";
 import { ChatService } from "@/operations/_services/chat-service";
 
-export default defineOperationFn("chat.typing")
-  .action()
+export default defineOperationFn("conversations.typing")
+  .mutate()
   .input(z.object({ conversationId: z.string() }))
   .auth()
   .handler(async ({ ctx, input }) => {

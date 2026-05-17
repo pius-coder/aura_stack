@@ -6,10 +6,13 @@ La **WhatsApp AI Matchmaking Platform** est une plateforme de mise en relation c
 
 Le cœur du produit est un **système Graph RAG relationnel** : chaque conversation WhatsApp avec une instance d'agent IA dédiée alimente un knowledge graph stocké en PostgreSQL (entités `User`, `Service`, `Skill`, `Location`, `Industry`, `Need` et relations `PROVIDES`, `REQUIRES`, `LOCATED_IN`, `LOOKS_FOR`, `MATCHES`, `CONNECTED_TO`). Les requêtes de matching sont résolues par un orchestrateur séparé qui combine **traversal de graphe** (CTE récursives Postgres) et **similarité vectorielle** (pgvector) via une fusion **RRF**, avec un mécanisme de diversité pour exposer à la fois des profils très compatibles et des profils complémentaires.
 
-La plateforme expose deux surfaces utilisateur :
+La plateforme expose trois surfaces utilisateur complémentaires :
 
 1. Un **dashboard web** (TanStack Start + Aura UI Kit shadcn) pour la gestion de profil, des services, du chat temps réel anonyme (Aura broadcast WebSocket), des notations, des litiges et de l'abonnement.
-2. Un **bot WhatsApp** (Baileys + Evolution API en MVP, WhatsApp Business API officielle avant production payante) où chaque utilisateur dispose de sa propre instance LangGraph (état persistant via checkpointer PostgreSQL, persona pro vouvoyante, multilingue FR/EN).
+2. Un **bot WhatsApp** (Baileys + Evolution API en MVP, WhatsApp Business API officielle avant production payante) qui constitue la surface conversationnelle prioritaire du produit.
+3. Un **labo de simulation Orya** utilisé pour valider le MVP sans WhatsApp réel, avec plusieurs profils seedés, une simulation de conversation type WhatsApp, et la visualisation de l'état dashboard correspondant.
+
+L'onboarding suit un modèle **double entrée** : un utilisateur peut commencer par le Dashboard_Web ou par le Bot_WhatsApp, mais l'expérience coeur et la réactivation quotidienne sont pensées **WhatsApp-first**. La persona conversationnelle d'Orya est **hybride et adaptative** : chaleureuse et naturelle dans les échanges courants, plus stricte sur la confiance, les données personnelles, l'argent, les litiges et les refus.
 
 Le modèle économique est progressif : MVP gratuit (M1-6, objectif 500 prestataires actifs et 2000 users), monétisation freemium phase 2 via Fapshi (Badge Vérifié 10 000 FCFA/an, Boost 1 000 FCFA/7 jours, Abonnement Pro 3 000 FCFA/mois, MTN MoMo + Orange Money), commission 5-8% avec escrow et expansion francophone (CI, Sénégal, Burkina) en phase 3 via Flutterwave. Le présent document spécifie les requirements **métier** (parcours utilisateur, règles business, monétisation par phases) et **techniques** (intégrations WhatsApp/Fapshi/LLM, Graph RAG, performances, observabilité, conformité CEMAC) nécessaires au MVP et à son extensibilité.
 
@@ -23,14 +26,15 @@ Le modèle économique est progressif : MVP gratuit (M1-6, objectif 500 prestata
 
 ### Composants applicatifs
 
-- **Dashboard_Web** : Application TanStack Start servie par Aura, point d'entrée pour inscription, gestion de profil, services, matchings reçus, chat anonyme, notations, litiges, abonnements.
-- **Bot_WhatsApp** : Surface conversationnelle exposée à chaque utilisateur lié, alimentée par une instance dédiée du Graphe_Agent_User.
+- **Dashboard_Web** : Application TanStack Start servie par Aura, point d'entrée pour inscription, gestion de profil, services, matchings reçus, chat anonyme, notations, litiges, abonnements, et surface de suivi des conversations Orya.
+- **Bot_WhatsApp** : Surface conversationnelle prioritaire exposée à chaque utilisateur lié, alimentée par une instance dédiée du Graphe_Agent_User.
+- **Dev_Sandbox_Orya_Lab** : Surface de validation manuelle simulant WhatsApp et affichant l'état dashboard de plusieurs profils seedés en temps réel via le même pipeline métier.
 - **Admin_Console** : Sous-section du Dashboard_Web réservée au rôle Admin, exposant la gestion des Disputes, suspensions et métriques business/IA.
 
 ### Système IA et matching
 
 - **Graphe_Agent_User** : Instance LangGraph (un graphe par utilisateur) modélisant le dialogue WhatsApp avec nodes `HydrationNode → ConversationNode → ExtractionNode → MatchingIntentNode → OrchestratorCallNode → ResponseNode`. État persisté via checkpointer PostgreSQL.
-- **Persona_Pro_Vouvoyante** : Persona stricte du Bot_WhatsApp : assistante IA professionnelle, vouvoiement systématique, ton neutre et professionnel, jamais de tutoiement ni de familiarité, identique en FR et EN (avec traduction culturelle équivalente : « you » formel, registre soutenu).
+- **Persona_Hybride_Adaptative** : Persona d'Orya : ton naturel, chaleureux et utile en conversation courante, avec resserrement automatique du ton et des garde-fous sur les sujets sensibles (données personnelles, argent, litiges, modération, hors périmètre).
 - **Knowledge_Graph** : Graphe relationnel stocké en PostgreSQL composé d'entités (`User`, `Service`, `Skill`, `Location`, `Industry`, `Need`) et de relations typées (`PROVIDES`, `REQUIRES`, `LOCATED_IN`, `LOOKS_FOR`, `MATCHES`, `CONNECTED_TO`).
 - **Orchestrateur_Matching** : Service LangGraph indépendant aux nodes `ReceiveRequest → GraphTraversal → EmbeddingQuery → HybridScoring → Diversity → Filter → Return`. Sollicité par Graphe_Agent_User pour résoudre une requête de mise en relation.
 - **Graph_Traversal** : Recherche de chemins de longueur 1 à 3 dans le Knowledge_Graph satisfaisant la requête, exécutée via CTE récursives PostgreSQL.
@@ -124,7 +128,8 @@ Cette feature consomme les capacités suivantes du framework Aura (cf. `.kiro/sp
 2. THE Bot_WhatsApp SHALL invalider le code de liaison après usage et fixer une expiration de 30 minutes par défaut.
 3. IF le Bot_WhatsApp reçoit un code expiré ou inconnu, THEN THE Bot_WhatsApp SHALL répondre dans la langue détectée que le code est invalide et inviter l'utilisateur à en générer un nouveau dans le Dashboard_Web.
 4. WHEN un numéro WhatsApp tente de se lier à un second compte alors qu'il est déjà lié, THE Bot_WhatsApp SHALL refuser la liaison et indiquer que le numéro est déjà rattaché à un compte.
-5. WHEN la liaison WhatsApp est validée, THE Bot_WhatsApp SHALL envoyer un message de bienvenue présentant la Persona_Pro_Vouvoyante et les fonctionnalités disponibles.
+5. WHEN la liaison WhatsApp est validée, THE Bot_WhatsApp SHALL envoyer un message de bienvenue présentant la Persona_Hybride_Adaptative et les fonctionnalités disponibles.
+6. THE plateforme SHALL permettre qu'un compte initié côté Dashboard_Web soit repris côté WhatsApp via le code de liaison, et qu'un compte initié côté WhatsApp soit complété ensuite sur le Dashboard_Web sans rupture d'identité.
 
 ### Requirement 3 : Choix du type de profil
 
@@ -223,16 +228,16 @@ Cette feature consomme les capacités suivantes du framework Aura (cf. `.kiro/sp
 
 ## B. Requirements Bot WhatsApp et Persona
 
-### Requirement 11 : Persona stricte pro vouvoyante
+### Requirement 11 : Persona hybride et adaptative
 
-**User Story :** En tant qu'utilisateur, je veux interagir avec un Bot_WhatsApp adoptant systématiquement la Persona_Pro_Vouvoyante, afin que l'expérience soit professionnelle et homogène.
+**User Story :** En tant qu'utilisateur, je veux interagir avec un Bot_WhatsApp adoptant une Persona_Hybride_Adaptative, afin que l'expérience soit naturelle au quotidien tout en restant fiable et rassurante sur les sujets sensibles.
 
 #### Acceptance Criteria
 
-1. THE Graphe_Agent_User SHALL utiliser un system prompt définissant la Persona_Pro_Vouvoyante imposant le vouvoiement, un ton neutre et professionnel, et l'absence de familiarité ou d'humour personnel.
-2. WHEN le Bot_WhatsApp répond en français, THE Graphe_Agent_User SHALL utiliser exclusivement la deuxième personne du pluriel (« vous », « votre », « vos ») pour s'adresser à l'utilisateur.
-3. WHEN le Bot_WhatsApp répond en anglais, THE Graphe_Agent_User SHALL utiliser un registre formel équivalent (formules « please », « kindly », évitant les contractions et le slang).
-4. IF un message généré contient une violation détectée de la Persona_Pro_Vouvoyante (tutoiement, argot, emoji excessif), THEN THE ResponseNode SHALL régénérer la réponse jusqu'à conformité ou, après deux échecs, retourner une réponse de secours conforme prédéfinie.
+1. THE Graphe_Agent_User SHALL utiliser un system prompt définissant la Persona_Hybride_Adaptative avec une base conversationnelle chaleureuse, utile et concise, et des règles renforcées sur la vie privée, l'argent, les litiges et les limites du produit.
+2. WHEN le Bot_WhatsApp répond en français dans un contexte sensible (matching, paiement, refus, modération, données personnelles), THE Graphe_Agent_User SHALL utiliser le vouvoiement et un registre professionnel.
+3. WHEN le Bot_WhatsApp répond en anglais dans un contexte sensible, THE Graphe_Agent_User SHALL utiliser un registre formel équivalent (formules « please », évitement du slang, pas de familiarité excessive).
+4. IF un message généré contient une violation détectée de la Persona_Hybride_Adaptative (tutoiement sur sujet sensible, argot, fuite de PII, emoji excessif), THEN THE ResponseNode SHALL régénérer la réponse jusqu'à conformité ou, après deux échecs, retourner une réponse de secours conforme prédéfinie.
 5. THE Graphe_Agent_User SHALL refuser de répondre aux requêtes hors périmètre (sujets politiques, contenus adultes, conseils médicaux/juridiques personnels) et SHALL rediriger vers les fonctionnalités de la plateforme.
 
 ### Requirement 12 : Conversation naturelle multilingue FR/EN
@@ -256,6 +261,7 @@ Cette feature consomme les capacités suivantes du framework Aura (cf. `.kiro/sp
 2. THE HydrationNode SHALL injecter ces données dans l'état LangGraph de manière structurée pour que le ConversationNode puisse y faire référence dans les réponses.
 3. WHEN les données de profil ou de services changent côté Dashboard_Web, THE HydrationNode SHALL refléter la dernière version persistée à chaque nouveau tour de conversation.
 4. THE Graphe_Agent_User SHALL persister son état complet via le checkpointer PostgreSQL natif Aura à chaque transition de node.
+5. THE plateforme SHALL utiliser le même pipeline conversationnel `message entrant -> normalisation -> UserAgentService -> extraction -> matching -> réponse` pour le Bot_WhatsApp, le chat Orya du Dashboard_Web et le Dev_Sandbox_Orya_Lab.
 
 ### Requirement 14 : Détection d'intention de matching
 
@@ -713,3 +719,27 @@ Cette feature consomme les capacités suivantes du framework Aura (cf. `.kiro/sp
 2. WHEN un utilisateur précise explicitement « partout » ou « toutes régions » dans sa requête conversationnelle, THE Graphe_Agent_User SHALL signaler cette extension à l'Orchestrateur_Matching qui SHALL relâcher le filtre `region`.
 3. THE plateforme SHALL ne jamais matcher un utilisateur d'une `region` dont le `Provider_Paiement` n'est pas configuré, dans les phases monétisées (`freemium` et `commission`), afin d'éviter des mises en relation non monétisables.
 4. THE plateforme SHALL exposer dans le profil prestataire la zone d'intervention (`zone`) au format texte libre et l'utiliser comme entité `Location` dans le Knowledge_Graph.
+
+### Requirement 51 : Sandbox de simulation Orya
+
+**User Story :** En tant qu'équipe produit ou technique, je veux un Dev_Sandbox_Orya_Lab multi-profils pour simuler WhatsApp, afin de valider le coeur conversationnel, le matching et le dashboard sans téléphone réel.
+
+#### Acceptance Criteria
+
+1. THE plateforme SHALL exposer une surface de simulation affichant au moins 6 profils seedés sélectionnables.
+2. WHEN un profil simulé envoie un message à Orya dans le sandbox, THE plateforme SHALL utiliser exactement le même UserAgentService que le Bot_WhatsApp.
+3. THE Dev_Sandbox_Orya_Lab SHALL afficher pour le profil actif les Match_Request envoyées/reçues, les Conversations_Anonymes ouvertes et les derniers événements métier.
+4. WHEN une réponse d'Orya est produite dans le sandbox, THE plateforme SHALL pouvoir exposer une trace de pipeline contenant au minimum la langue détectée, l'intention, l'extraction, l'appel matching et l'action métier exécutée.
+5. THE Dev_Sandbox_Orya_Lab SHALL permettre le scénario complet `demande -> sélection numérotée -> création de Match_Request -> acceptation/refus -> conversation`.
+
+### Requirement 52 : Pipeline agent unique et messages canoniques
+
+**User Story :** En tant qu'architecte, je veux que toutes les surfaces d'entrée utilisent les mêmes contrats métier et un format canonique de message, afin d'éviter les divergences entre simulation, dashboard et WhatsApp réel.
+
+#### Acceptance Criteria
+
+1. THE plateforme SHALL définir un contrat `CanonicalWhatsAppMessage` utilisé par le webhook, l'inbox persistée et le traitement agent.
+2. THE plateforme SHALL définir les contrats `OryaIntent`, `OryaExtractionPayload`, `OryaMatchPresentation` et `OryaTurnResult` comme structures métier stables et validées.
+3. WHEN un message entrant est persisté, THE traitement inbox SHALL relire le payload canonique sans concaténations ad hoc ni parseur spécifique à la surface d'entrée.
+4. THE moteur de matching SHALL rester `retrieval-first`, c'est-à-dire que le ranking métier est produit avant la reformulation conversationnelle par le LLM.
+5. THE plateforme SHALL conserver la possibilité de brancher Evolution_API, WhatsApp Business API officielle et le Dev_Sandbox_Orya_Lab sur la même couche `UserAgentService`.

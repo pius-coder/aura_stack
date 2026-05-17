@@ -2,7 +2,7 @@ import { defineOperationFn } from "@/aura/server/operation";
 import { z } from "zod";
 import { ProfileService } from "@/operations/_services/profile-service";
 
-export default defineOperationFn("profiles.set-consent")
+export default defineOperationFn("users.consent-record")
   .mutate()
   .input(
     z.object({

@@ -7,16 +7,29 @@ import { AuraOtpPurpose } from "@/generated/prisma/enums";
 import { normalizePhone } from "@/aura/server/auth/phone";
 import { enforceRateLimit } from "@/aura/server/rate-limit";
 import { AliasService } from "./alias-service";
+import { UserAgentService } from "./user-agent-service";
 
 export class AuthService extends AuraService {
 
-  async register(args: { email: string; password: string; displayName?: string }) {
+  async register(args: {
+    phoneE164: string;
+    email?: string;
+    password: string;
+    displayName?: string;
+    consent?: { privacy: boolean; dataProcessing: boolean; whatsappComms: boolean };
+  }) {
     const pwError = this.validatePassword(args.password);
     if (pwError) throw new AuraError("VALIDATION_ERROR", pwError);
 
-    const existing = await this.db.auraUser.findUnique({ where: { email: args.email } });
-    if (existing) {
-      throw new AuraError("CONFLICT", "Email ou mot de passe invalide.");
+    if (args.consent && (!args.consent.privacy || !args.consent.dataProcessing || !args.consent.whatsappComms)) {
+      throw new AuraError("BAD_REQUEST", "Tous les consentements requis.");
+    }
+
+    const existingPhone = await this.db.auraPhoneIdentity.findUnique({
+      where: { phoneE164: args.phoneE164 },
+    });
+    if (existingPhone) {
+      throw new AuraError("CONFLICT", "Ce numéro est déjà utilisé.");
     }
 
     const passwordHash = await hashPassword(args.password);
@@ -25,14 +38,42 @@ export class AuthService extends AuraService {
     const linkCode = this.makeLinkCode();
     const linkExpiresAt = new Date(Date.now() + 30 * 60 * 1000);
 
+    const consentData = args.consent
+      ? {
+          privacy: { accepted: true, at: new Date().toISOString() },
+          dataProcessing: { accepted: true, at: new Date().toISOString() },
+          whatsappComms: { accepted: true, at: new Date().toISOString() },
+        }
+      : undefined;
+
     const user = await this.db.auraUser.create({
       data: {
-        email: args.email,
+        email: args.email ?? null,
         displayName: args.displayName ?? null,
+        whatsappLinked: true,
+        whatsappE164: args.phoneE164,
         linkCode,
         linkCodeExpiresAt: linkExpiresAt,
         passwordCredential: { create: { passwordHash } },
-        profile: { create: { alias, displayName: args.displayName ?? null, language: "FR" } },
+        phoneIdentities: {
+          create: {
+            countryCode: args.phoneE164.slice(0, 4),
+            nationalNumber: args.phoneE164.slice(4),
+            phoneE164: args.phoneE164,
+            verifiedAt: new Date(),
+            whatsappVerifiedAt: new Date(),
+          },
+        },
+        profile: {
+          create: {
+            alias,
+            displayName: args.displayName ?? null,
+            language: "FR",
+            isProvider: true,
+            isClient: true,
+            consent: consentData,
+          },
+        },
       },
       include: { profile: true },
     });
@@ -45,6 +86,7 @@ export class AuthService extends AuraService {
     return {
       userId: user.id,
       email: user.email,
+      phoneE164: args.phoneE164,
       profileId: user.profile!.id,
       linkCode,
       linkCodeExpiresAt: linkExpiresAt.toISOString(),
@@ -217,7 +259,7 @@ export class AuthService extends AuraService {
     });
 
     if (!challenge.userId) {
-      throw new AuraError("OTP_INVALID", "Code de vérification invalide.");
+      throw new AuraError("BAD_REQUEST", "Code de vérification invalide.");
     }
 
     const passwordHash = await hashPassword(args.password);
@@ -255,6 +297,81 @@ export class AuthService extends AuraService {
     }
 
     return { code, expiresAt: expiresAt.toISOString() };
+  }
+
+  async processDevChat(phoneE164: string, text: string) {
+    let user = await this.db.auraUser.findFirst({
+      where: { phoneIdentities: { some: { phoneE164 } } },
+      include: { phoneIdentities: { where: { phoneE164 } }, profile: true },
+    });
+
+    if (!user) {
+      user = await this.db.auraUser.create({
+        data: {
+          whatsappLinked: true,
+          whatsappE164: phoneE164,
+          phoneIdentities: {
+            create: {
+              countryCode: phoneE164.slice(0, 4),
+              nationalNumber: phoneE164.slice(4),
+              phoneE164,
+              verifiedAt: new Date(),
+              whatsappVerifiedAt: new Date(),
+            },
+          },
+          profile: {
+            create: {
+              alias: `dev-${Math.random().toString(36).slice(2, 10)}`,
+              language: "FR",
+              status: "ACTIVE",
+            },
+          },
+        },
+        include: { phoneIdentities: { where: { phoneE164 } }, profile: true },
+      });
+    }
+
+    let reply: string;
+    let trace: import("./user-agent-service").TraceStep[] = [];
+    try {
+      const agentSvc = new UserAgentService(this.ctx);
+      const result = await agentSvc.processMessageWithTrace(user.id, text);
+      reply = result.reply;
+      trace = result.trace;
+    } catch (e: unknown) {
+      const msg = e instanceof Error ? e.message : String(e);
+      if (msg.includes("429")) {
+        reply = "⚠️ L'IA Orya est momentanément saturée (trop de requêtes). Veuillez réessayer dans quelques secondes.";
+      } else if (msg.includes("401") || msg.includes("auth") || msg.includes("key")) {
+        reply = "⚠️ Erreur d'authentification de l'IA. Contactez l'administrateur.";
+      } else {
+        reply = `⚠️ Erreur IA: ${msg.slice(0, 200)}`;
+      }
+    }
+
+    return { reply, userId: user.id, isNew: user.profile?.displayName ? false : true, pipelineTrace: trace }; /**/
+  }
+
+  async linkWhatsApp(phoneE164: string, linkCode: string) {
+    const identity = await this.db.auraPhoneIdentity.findFirst({
+      where: { linkCode, phoneE164 },
+    });
+    if (!identity) return { ok: false as const, reason: "INVALID_CODE" as const };
+
+    if (!identity.linkCodeExpiresAt || identity.linkCodeExpiresAt < new Date()) {
+      return { ok: false as const, reason: "CODE_EXPIRED" as const };
+    }
+
+    await this.db.auraPhoneIdentity.update({
+      where: { id: identity.id },
+      data: { whatsappVerifiedAt: new Date(), linkCode: null, linkCodeExpiresAt: null },
+    });
+    await this.db.auraUser.update({
+      where: { id: identity.userId },
+      data: { whatsappLinked: true, whatsappE164: phoneE164 },
+    });
+
+    return { ok: true as const, userId: identity.userId };
   }
 
   private validatePassword(password: string): string | null {

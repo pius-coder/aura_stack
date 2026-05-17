@@ -192,15 +192,91 @@ Les actions ont un DB Proxy tombstoné : `ctx.db` throw sur toute tentative d'ac
 
 ---
 
-## 7. ACTIONS À VENIR (Priorité)
+## 7. WAVES 0-7 — SESSION COMPLÈTE (Mai 2026)
 
-1. **AuthService** (`_services/auth-service.ts`) — refactor auth ops
-2. **ProfileService** (`_services/profile-service.ts`) — R3-R4
-3. **UserAgentService** (`_services/user-agent-service.ts`) — agent IA par utilisateur + extraction LLM + intention
-4. **WebSocket rooms** — broadcast `/ws/chat` avec pub/sub room-based
-5. **KnowledgeGraphService** — CTE récursive, pgvector, embeddings
-6. **ObservabilityService** — métriques business/IA
-7. **Tests E2E + Docker compose**
+Toutes les 7 waves ont été implémentées sur le backend. Détail des fichiers créés/modifiés :
+
+### Wave 0 — Fondations (13 tasks)
+- `AuraService` base class (`src/aura/server/service.ts`)
+- 8 services créés : InboxService, UserAgentService, MatchingService, KnowledgeGraphService,
+  ChatService, PaymentService, AliasService, AuthService
+- 5 notification definitions : match-request, match-accepted, match-refused, new-message, payment-success
+- `with-pro-quota` middleware
+- Fix des `.action()` avec DB proxy tombstoné
+- Nettoyage `AuthUserSafe` (champs fantômes retirés)
+- Ajout `linkCode` / `linkCodeExpiresAt` sur AuraUser
+
+### Wave 1 — Renommage design.md (10 tasks, 22 fichiers)
+- Toutes les ops renommées pour correspondre à l'inventaire design.md lignes 616-711
+- `matches/list-incoming` + `list-outgoing` fusionnées en `matching/list-mine`
+- `services/toggle` → `services/deactivate` (comportement deactivate-only)
+- Middleware `withProfile` → `withActiveProfile`
+- Agent `agents.whatsapp-bot` → `ai/agent-user`
+- Nodes `agent/nodes/` → `ai/nodes/`
+- Routes frontend mises à jour
+
+### Wave 2 — Ops manquantes (6 tasks)
+- `users/register.operation.ts` (R1 — inscription email + consent)
+- `users/verify-email.operation.ts` (stub)
+- `users/set-region.operation.ts` (R40.1)
+- `users/data-export.action.ts` (R36.5 RGPD)
+- `users/data-delete.action.ts` (R36.4)
+- `conversations/close.operation.ts` (R8.4)
+
+### Wave 3 — Matching/Admin/Paiements (16 tasks)
+- `matching/orchestrator.action.ts`, `orchestrator-cache.db-read.ts`
+- `disputes/list-pending`, `snapshot-builder`
+- `admin/metrics-business`, `metrics-ai`
+- `payments/initiate-badge/boost/pro`, `refund`
+- `subscriptions/status`, `cancel`, `renew-charge.cron`
+- `notifications/warning`, `suspension`
+- `_middleware/with-region-filter`
+
+### Wave 4 — Knowledge Graph (5 tasks)
+- Prisma schema enrichi (status, source, indexes)
+- `KnowledgeGraphService` (upsertEntity, upsertRelation, traverse CTE, regenerateEmbedding, serialize/parse)
+- 6 graph ops : upsert-entity, upsert-relation, regenerate-embedding, traverse.db-read, search-vector, refresh-views
+- RRF fusion + Diversity Mix dans MatchingService
+- `ctx.scheduler.runAfter` dans ProfileService + ServiceService
+
+### Wave 5 — Admin & Modération (2 tasks)
+- `DisputeService` (report + resolve avec notifications WhatsApp)
+- `_middleware/with-admin.middleware.ts`
+- Opérations `disputes.report` et `disputes.resolve` refactored en thin handlers
+
+### Wave 6 — Paiements & Monétisation (5 tasks)
+- `workflows/verify-identity.workflow.ts` (defineWorkflow — upload → review → activate/reject)
+- `workflows/escrow-lifecycle.workflow.ts` (defineWorkflow — hold → confirm → release)
+- `feature-flags.ts` (BUSINESS_PHASE: mvp | freemium | commission)
+- `ObservabilityService` (recordLlmCall, getBusinessMetrics, getAiMetrics)
+- `flutterwave.ts` (PaymentProvider implémentation phase 3)
+
+### Wave 7 — Infrastructure (5 tasks)
+- Property-based tests (RRF, serialize round-trip, diversity, R25.1 alias)
+- `docker-compose.yml` (postgres pgvector, redis, evolution-api, aura-app)
+- `/metrics` endpoint stub, idempotency middleware (Hono)
+- `WhatsAppBusinessGateway` (Meta Graph API v22)
+- Fix `defineDbReadFn` (Object.assign sur name → crash Vite)
+
+### Notes techniques
+- `design.md` lignes 52-56 : UI pixel-parfait laissé au design produit shadcn
+- `.action.ts` fichier suffix non reconnu par codegen → les ops `.action.ts` ne sont pas dans `api.ts`
+  (solution : renommer en `.operation.ts` pour codegen OU rester avec side-effect import dans registry)
+- `defineDbReadFn` avait un bug : `Object.assign(fn, { name: args.name })` crashe en strict mode Vite
+  (fixé : `(fn as unknown as Record<string, unknown>).__auraDbRead = true`)
+- Review agent doit être appelé avec le template EXACT du §12 d'AGENTS.md
+
+### Dashboard Web actuel
+Routes existantes : `/`, `/sign-in`, `/sign-up`, `/onboarding`, `/app` (layout),
+`/app/services`, `/app/matches`, `/app/chat`, `/app/billing`, `/app/settings`,
+`/admin`, `/admin/disputes`, `/admin/users`, `/p/$alias`
+Composants UI : `src/components/ThemeToggle.tsx`, `Header.tsx`, `Footer.tsx`,
+`ThemeProvider.tsx`
+
+Design tokens (homepage) : bg blur circles, backdrop-blur cards, gradient buttons,
+rounded-full nav, macOS-style mockup, tailwind classes.
+Palette : bleu (`from-blue-500 to-blue-600`) comme couleur primaire,
+fond blanc/bleu très clair, textes slate.**
 
 ---
 
@@ -284,6 +360,36 @@ Les actions ont un DB Proxy tombstoné : `ctx.db` throw sur toute tentative d'ac
       ├── chat-message.tsx
       └── chat-input.tsx
       src/components/contacts/
-      ├── contact-list.tsx
-      └── contact-card.tsx
+├── contact-list.tsx
+└── contact-card.tsx
       ```
+
+### 🔴 Erreurs Wave 3-7
+
+16. **`.action()` + DB = CRASH — toujours.**
+    - 7 opérations créées avec `.action()` qui accèdent à `ctx.db` ou délèguent à des services qui utilisent `this.db`.
+    - ✅ **Correction :** `.mutate()` pour tout ce qui touche à la DB. `.action()` réservé aux side-effects purs (webhooks, appels API externes).
+
+17. **Codegen ne scanne que `*.operation.ts`.**
+    - Fichiers `.action.ts` : le codegen ne les trouve PAS, donc pas dans `api.ts`.
+    - ✅ **Correction :** Renommer en `.operation.ts` OU accepter qu'ils ne soient pas dans la surface typée `api`.
+
+18. **Template review agent EXACT, pas custom.**
+    - J'ai fait des prompts de review customisés au lieu du template exact §12 d'AGENTS.md.
+    - ✅ **Correction :** Toujours le template exact, sans ajouter "basé sur vos changements".
+
+19. **`.entities()` sur `.query()` est inutile.**
+    - Les queries ne déclenchent pas d'invalidation. Mettre `.entities()` est trompeur.
+    - ✅ **Correction :** Garder `.entities()` seulement sur `.mutate()`.
+
+20. **`ctx.scheduler.runAfter` attend un operation ref, pas un string.**
+    - J'ai passé `"graph.regenerate-embedding"` en string au lieu de `api.graph["regenerate-embedding"]`.
+    - ✅ **Correction :** Toujours utiliser `api.namespace.operationRef`, pas de string.
+
+21. **Test mocks doivent inclure TOUT ce que le service utilise.**
+    - Ajout de `this.scheduler.runAfter()` → tests qui plantent car `scheduler` non mocké.
+    - ✅ **Correction :** Vérifier que le mock AuraContext inclut scheduler, notify, etc.
+
+22. **`throw new Error(...)` dans workflows.**
+    - Le workflow `verify-identity` utilisait `throw new Error(...)` au lieu de `throw new AuraError(...)`.
+    - ✅ **Correction :** Jamais `new Error(...)` — toujours `new AuraError("CODE", "msg")`.

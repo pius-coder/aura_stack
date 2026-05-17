@@ -1,4 +1,4 @@
-import { describe, it, expect, vi } from "vitest";
+import { describe, it, expect } from "vitest";
 import { MatchService } from "./match-service";
 import { AuraService } from "@/aura/server/service";
 import type { AuraContext } from "@/aura/server/context";
@@ -40,6 +40,7 @@ describe("MatchService", () => {
       const svc = new MatchService(ctx);
       const result = await svc.create("user_1", "user_2");
       expect(result.id).toBe("match_1");
+      expect(notified).toBe(true);
     });
   });
 

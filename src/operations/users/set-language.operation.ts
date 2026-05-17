@@ -2,7 +2,7 @@ import { defineOperationFn } from "@/aura/server/operation";
 import { z } from "zod";
 import { ProfileService } from "@/operations/_services/profile-service";
 
-export default defineOperationFn("profiles.set-language")
+export default defineOperationFn("users.set-language")
   .mutate()
   .input(z.object({ language: z.enum(["FR", "EN"]) }))
   .entities(["Profile"])

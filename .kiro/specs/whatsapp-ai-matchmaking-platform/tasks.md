@@ -1,574 +1,361 @@
-# Implementation Plan: WhatsApp AI Matchmaking Platform
+# Implementation Plan: WhatsApp AI Matchmaking Platform — Waves UI+Réseau
 
-## Overview
+## Comment ce plan a été construit
 
-This plan implements the **WhatsApp AI Matchmaking Platform** on the Aura framework (cf. `.kiro/specs/aura-hono-tanstack-migration/`). It covers all 50 requirements (R1-R50) across 7 architecture layers (design.md § Architecture en couches, lignes 218-588). Each task traces to specific requirements and design sections. Operations strictly follow the inventory at design.md § Inventaire des operations Aura (lignes 596-711).
+Ce document remplace `tasks.md` (archivé sous `tasks.backup`). Il est construit par analyse de la relation entre `requirements.md` (50 requirements R1-R50) et `design.md` (7 couches architecture, inventaire operations §§ 596-723, modèles de données §§ 840-1364, Graph RAG §§ 1386-1894, LangGraph §§ 1897-2000).
 
-Services layer (`src/operations/_services/`): each service `extends AuraService` and encapsulates business logic. Operations are thin handlers that delegate to services (design.md § Pattern AuraService, lignes 15-37).
-
----
-
-## Tasks
-
-### 0. Fondations — Services, Notifications, Fixes
-
-- [x] 0.1 Créé `src/aura/server/service.ts` — classe `AuraService`
-  - Getter `this.db` → `ctx.db` (PrismaClient), `this.user` → `ctx.user`, `this.session` → `ctx.session`
-  - Getter `this.agent` → `ctx.agent`, `this.scheduler` → `ctx.scheduler`, `this.storage` → `ctx.storage`
-  - Getter `this.notify` → `ctx.notify`, `this.log` → `ctx.log`, `this.audit` → `ctx.audit`
-  - Getter `this.invalidate`, `this.paginate`, `this.runQuery`, `this.runMutation`, `this.runAction`
-  - _Requirements: R40 — AuraService pattern (design.md § Pattern AuraService, lignes 15-37)_
-
-- [x] 0.2 Créé `src/operations/_services/inbox-service.ts` — InboxService (Couche 1 Transport WhatsApp)
-  - `processIncoming(inboxId)` — traite message WhatsApp entrant: détecte code liaison, hydrate contexte, génère réponse via UserAgentService
-  - `handleLinkCode(phoneE164, code)` — cherche sur `AuraUser.linkCode` puis `AuraPhoneIdentity.linkCode`, lie le numéro
-  - `generateReply(userId, text)` — délègue à UserAgentService.processMessage (refactor: remplace l'appel direct à l'agent)
-  - Vérifié: `bun run test` — tests InboxService passent (skipped, processIncoming, handleLinkCode)
-  - _Requirements: R2 (liaison WhatsApp), R37 (WhatsApp gateway abstraction)_
-
-- [x] 0.3 Créé `src/operations/_services/user-agent-service.ts` — UserAgentService (Couche 2 Instance IA)
-  - `processMessage(userId, text)` — hydrate contexte via `hydrateUserContext`, détecte intention, génère réponse, applique guardrail persona
-  - `detectIntent(text)` — classification LLM via `ctx.agent.generateText()` avec parsing IntentSchema, 5 classes: chat/search_provider/search_connection/account/help, seuil 0.7
-  - `extractEntities(userId, text)` — extraction LLM skills/locations/industries/needs avec parsing ExtractionSchema
-  - `hydrateThread(userId)` — charge profil + services pour contexte du thread
-  - Guardrail persona: `checkPersonaCompliance()` regex tutoiement FR + anglais formel, 2 retry attempts, FALLBACK_RESPONSE si échec
-  - Vérifié: `bun run tsc --noEmit` — 0 erreurs, `bun run test` — 196 tests passent
-  - _Requirements: R11 (persona pro vouvoyante), R12 (multilingue FR/EN), R13 (hydratation contexte), R14 (détection intention), R15 (présentation résultats), R16 (notifications)_
-
-- [x] 0.4 Créé `src/operations/_services/matching-service.ts` — MatchingService (Couche 3 Orchestrateur Matching v1 keyword)
-  - `findMatches(requesterId, constraints)` — scoring keyword + diversity 60/30/10
-  - _Requirements: R19, R20, R21_
-
-- [x] 0.5 Créé `src/operations/_services/chat-service.ts` — ChatService (Couche 5 Chat temps réel)
-  - `sendMessage(userId, conversationId, body)` — vérifie existence + status OPEN + participant + body ≤ 4000 (R27.2), persist dans `chatMessage`, publie `message:new` dans room `conversation:{id}`, publie `message:received` dans room `user:{recipientId}`, notifie WhatsApp via `ctx.notify.via("new-message")`
-  - `sendTyping(userId, conversationId)` — vérifie existence + participant + status OPEN, publie `typing` dans room `conversation:{id}`
-  - Vérifié: `bun run test` — chat-service tests passent (sendMessage, sendTyping)
-  - _Requirements: R26 (chat temps réel WebSocket), R27 (latence 500ms, 4000 caractères, 200 conversations simultanées)_
-
-- [x] 0.6 Créé `src/operations/_services/payment-service.ts` — PaymentService (Couche 6 Paiement)
-  - `initiateCheckout(userId, kind)` — initie paiement via Provider_Fapshi, persiste dans Payment avec idempotencyKey
-  - _Requirements: R28 (PaymentProvider abstrait), R31 (Badge/Boost/Pro)_
-
-- [x] 0.7 Créé `src/operations/_services/alias-service.ts` — AliasService
-  - `generateUnique(lang)` — génère alias `{adjectif}-{nom-commun}-{4 chiffres}` en FR/EN, vérifie unicité via `profile.findUnique`, retry jusqu'à 5x
-  - _Requirements: R25.5 (schéma alias, unique par user_id/conversation_id)_
-
-- [x] 0.8 Créé les 5 notifications via `defineNotificationFn` dans `src/operations/notifications/`
-
-  | Notification | Fichier | R | Payload Zod |
-  |---|---|---|---|
-  | match-request | `notifications/match-request.notification.ts` | R6.2, R16 | `{ phoneE164, language }` |
-  | match-accepted | `notifications/match-accepted.notification.ts` | R6.4, R16.2 | `{ phoneE164, language }` |
-  | match-refused | `notifications/match-refused.notification.ts` | R16.2 | `{ phoneE164, language }` |
-  | new-message | `notifications/new-message.notification.ts` | R16.1 | `{ phoneE164, language }` |
-  | payment-success | `notifications/payment-success.notification.ts` | R16.3, R31 | `{ phoneE164, language }` |
-
-  - Chaque notification dispatchée via `ctx.notify.via("nom").send(payload).catch(() => {})`
-  - Enregistrées dans `_registry.ts` via side-effect imports
-  - _Requirements: R6, R9, R16_
-
-- [x] 0.9 Créé `src/operations/_middleware/with-pro-quota.middleware.ts`
-  - Vérifie Abonnement Pro actif → unlimited. Sinon, compte les matchs PENDING/ACCEPTED du jour ≤ 20 (R30.2)
-  - _Requirements: R30 (MVP phase: 20 matchs/jour max)_
-
-- [x] 0.10 Supprimé `src/lib/notifications/send.ts` — helpers manuels remplacés par `defineNotificationFn`
-
-- [x] 0.11 Fixé les 3 opérations utilisant `ctx.db.*` dans une `.action()` (DB proxy tombstoné)
-  - `src/operations/agent/process-incoming.operation.ts` → passé en `.mutate()`
-  - `src/operations/matching/run.operation.ts` → passé en `.mutate()`
-  - `src/operations/payments/start-checkout.operation.ts` → passé en `.mutate()`
-  - _Design note: les actions ont un DB proxy tombstoné (MEMO.md § Le Problème .action()). Solution: `.mutate()` + service_
-
-- [x] 0.12 Nettoyé `AuthUserSafe` dans `src/aura/shared/auth-types.ts` et `src/aura/server/auth/operations.ts`
-  - Retiré les champs fantômes: `businessName`, `countryId`, `currencyCode`, `onboardingCompleted`, `whatsappChallenge`, `hadWhatsapp` — ils n'existent pas sur le modèle `AuraUser` et causaient des crashes à l'exécution
-  - Vérifié: `bun run tsc --noEmit` — 0 erreurs dans les fichiers modifiés
-
-- [x] 0.13 Ajouté `linkCode` et `linkCodeExpiresAt` au modèle `AuraUser` dans `prisma/schema.prisma`
-  - Permet de stocker le code de liaison WhatsApp pour les utilisateurs inscrits par email (sans phone identity)
-  - `InboxService.handleLinkCode` cherche sur `AuraUser.linkCode` d'abord, puis `AuraPhoneIdentity.linkCode` en fallback
-  - Vérifié: `bun prisma generate` — types regénérés sans erreur
-
-**Note:** Ce qui n'est PAS dans le scope de ce task plan:
-- Les écrans Dashboard_Web pixel-parfaits (laissés au design produit shadcn — design.md § Scope, lignes 52-56)
-- Les prompts LLM exacts (versionnés dans `src/prompts/` avec tests de régression — design.md ligne 55)
-- Les politiques de modération détaillées (élaborées avec équipe juridique — design.md ligne 56)
-- Les enums et modèles phase 3 (`mission_escrows`, `Provider_Flutterwave`) — identifiés mais pas implémentés ici
+**Méthode :**
+- Chaque R<n> est tracé à son acceptance criteria dans `requirements.md`
+- Chaque tâche pointe vers les §§ correspondants dans `design.md`
+- Les tâches du `tasks.backup` (Waves 0-7 backend) sont référencées comme prérequis
+- Les nouvelles tâches UI utilisent les design tokens de la homepage (`src/app/routes/index.tsx`) :
+  - Palette : bleu primaire (`from-blue-500 to-blue-600`), fonds blancs/blur, slates
+  - Composants : backdrop-blur cards, rounded-full, shadow-card, gradient buttons
+  - Layout : mx-auto max-w-*, sections épurées, typo fine (font-light, tracking-tight)
+- Conventions AGENTS.md strictement respectées (kebab-case, AuraService, thin handlers, etc.)
 
 ---
 
-### 1. Conformité à l'inventaire design.md — Renommage des opérations
-
-Tâche: Renommer tous les fichiers et noms d'opérations pour correspondre exactement à l'inventaire design.md lignes 616-711.
-
-#### 1.1 Déplacer les opérations dans `users/` (design.md lignes 616-624)
-
-- [ ] 1.1.1 Déplacer `src/operations/auth/generate-link-code.operation.ts` → `src/operations/users/generate-link-code.operation.ts`
-  - Renommer l'opération: `auth.generate-link-code` → `users.generate-link-code`
-  - Mettre à jour `src/operations/_registry.ts`
-  - Vérifier: `bun run tsc --noEmit`, `bun run test`
-  - _Requirements: R1.3_
-
-- [ ] 1.1.2 Déplacer `src/operations/profiles/set-language.operation.ts` → `src/operations/users/set-language.operation.ts`
-  - Renommer l'opération: `profiles.set-language` → `users.set-language`
-  - Vérifier: `bun run tsc --noEmit`
-  - _Requirements: R39.2_
-
-- [ ] 1.1.3 Déplacer `src/operations/profiles/set-consent.operation.ts` → `src/operations/users/consent-record.operation.ts`
-  - Renommer l'opération: `profiles.set-consent` → `users.consent-record`
-  - Vérifier: `bun run tsc --noEmit`
-  - _Requirements: R1.5, R38.4_
-
-#### 1.2 Renommer dans `profiles/` (design.md lignes 626-630)
-
-- [ ] 1.2.1 Renommer `src/operations/profiles/update.operation.ts` → `src/operations/profiles/upsert.operation.ts`
-  - Nom d'opération: `profiles.update` → `profiles.upsert`
-  - _Requirements: R3, R4_
-
-- [ ] 1.2.2 Renommer `src/operations/profiles/get.operation.ts` → `src/operations/profiles/get-by-id.operation.ts`
-  - Nom d'opération: `profiles.get` → `profiles.get-by-id`
-
-#### 1.3 Renommer dans `services/` (design.md lignes 632-637)
-
-- [ ] 1.3.1 Renommer `src/operations/services/toggle.operation.ts` → `src/operations/services/deactivate.operation.ts`
-  - Nom d'opération: `services.toggle` → `services.deactivate`
-  - Comportement: ne désactive que le service (ne réactive pas). Pour réactiver → utiliser `services.update`
-  - _Requirements: R5.3_
-
-#### 1.4 Déplacer dans `matching/` (design.md lignes 639-646)
-
-- [ ] 1.4.1 Déplacer `src/operations/matches/create.operation.ts` → `src/operations/matching/create-request.operation.ts`
-  - Nom d'opération: `matches.create` → `matching.create-request`
-  - Ajouter `.use(withProQuota)` pour la limite 20 matchs/jour (R30.2)
-  - _Requirements: R6.3, R15.3, R24.1_
-
-- [ ] 1.4.2 Déplacer `src/operations/matches/accept.operation.ts` → `src/operations/matching/accept-request.operation.ts`
-  - Nom d'opération: `matches.accept` → `matching.accept-request`
-  - _Requirements: R6.4, R24.2_
-
-- [ ] 1.4.3 Déplacer `src/operations/matches/refuse.operation.ts` → `src/operations/matching/refuse-request.operation.ts`
-  - Nom d'opération: `matches.refuse` → `matching.refuse-request`
-  - _Requirements: R24.3_
-
-- [ ] 1.4.4 Déplacer `src/operations/matches/cancel.operation.ts` → `src/operations/matching/cancel-request.operation.ts`
-  - Nom d'opération: `matches.cancel` → `matching.cancel-request`
-  - _Requirements: R6.3_
-
-- [ ] 1.4.5 Fusionner `src/operations/matches/list-incoming.operation.ts` + `src/operations/matches/list-outgoing.operation.ts` → `src/operations/matching/list-mine.operation.ts`
-  - Nom d'opération: `matches.list-incoming` / `matches.list-outgoing` → `matching.list-mine`
-  - Retourne les matchs reçus et envoyés dans une seule query, triés par `created_at` décroissant (R6.1)
-  - Expose uniquement `{ alias }` pour les matchs en attente (R25.1: "sans nom réel, photo, localisation précise")
-  - _Requirements: R6.1, R8, R25.1_
-
-- [ ] 1.4.6 Déplacer `src/operations/matches/expire-pending.cron.ts` → `src/operations/matching/expire-pending.cron.ts`
-  - Utilise `defineCronFn("matching.expire-pending").schedule("0 6 * * *")` — quotidien à 6h
-  - Passe les matchs `PENDING` de plus de 14j à `EXPIRED` (R24.5)
-  - _Requirements: R24.5_
-
-#### 1.5 Déplacer dans `conversations/` (design.md lignes 648-654)
-
-- [ ] 1.5.1 Déplacer `src/operations/chat/send-message.operation.ts` → `src/operations/conversations/send-message.operation.ts`
-  - Nom d'opération: `chat.send-message` → `conversations.send-message`
-  - Thin handler déléguant à `ChatService.sendMessage`
-  - _Requirements: R26.3, R27_
-
-- [ ] 1.5.2 Déplacer `src/operations/chat/list-messages.operation.ts` → `src/operations/conversations/messages-paginated.db-read.ts`
-  - Renommer en `.db-read.ts` (pattern defineDbReadFn)
-  - Pagination curseur 20 messages/page (R8.2)
-  - _Requirements: R8.2_
-
-- [ ] 1.5.3 Déplacer `src/operations/chat/list-conversations.operation.ts` → `src/operations/conversations/list-mine.operation.ts`
-  - Nom d'opération: `chat.list-conversations` → `conversations.list-mine`
-  - _Requirements: R8.1_
-
-- [ ] 1.5.4 Déplacer `src/operations/chat/mark-read.operation.ts` → `src/operations/conversations/mark-read.operation.ts`
-  - Nom d'opération: `chat.mark-read` → `conversations.mark-read`
-
-- [ ] 1.5.5 Déplacer `src/operations/chat/typing.operation.ts` → `src/operations/conversations/typing.operation.ts`
-  - Nom d'opération: `chat.typing` → `conversations.typing`
-  - Utilise `.action()` (pas de DB write, pas d'invalidation)
-
-#### 1.6 Déplacer dans `ratings/` (design.md lignes 656-658)
-
-- [ ] 1.6.1 Renommer `src/operations/ratings/create.operation.ts` → `src/operations/ratings/submit.operation.ts`
-  - Nom d'opération: `ratings.create` → `ratings.submit`
-  - _Requirements: R7.1, R7.5_
-
-- [ ] 1.6.2 Renommer `src/operations/ratings/list-for-user.operation.ts` → `src/operations/ratings/stats-by-user.db-read.ts`
-  - _Requirements: R7.2_
-
-#### 1.7 Déplacer dans `disputes/` (design.md lignes 660-664)
-
-- [ ] 1.7.1 Renommer `src/operations/disputes/create.operation.ts` → `src/operations/disputes/report.operation.ts`
-  - Nom d'opération: `disputes.create` → `disputes.report`
-  - _Requirements: R9.1_
-
-#### 1.8 Déplacer dans `payments/` (design.md lignes 672-677)
-
-- [ ] 1.8.1 Renommer `src/operations/payments/get-status.operation.ts` → `src/operations/payments/list-history.operation.ts`
-  - Nom d'opération: `payments.get-status` → `payments.list-history`
-
-#### 1.9 Renommer middleware et agents
-
-- [ ] 1.9.1 Renommer `src/operations/_middleware/with-profile.middleware.ts` → `src/operations/_middleware/with-active-profile.middleware.ts`
-  - Middleware name: `withProfile` → `withActiveProfile`
-
-- [ ] 1.9.2 Déplacer `src/operations/agents/whatsapp-bot.agent.ts` → `src/operations/ai/agent-user.agent.ts`
-  - Agent name: `agents.whatsapp-bot` → `ai.agent-user`
-
-- [ ] 1.9.3 Déplacer les nodes: `src/operations/agent/nodes/` → `src/operations/ai/nodes/`
-  - `hydration.ts`, `response.ts`, `matching-intent.ts`, `extraction.ts`
-  - Mettre à jour les imports dans `user-agent-service.ts`
-
-#### 1.10 Régénérer le registre
-
-- [ ] 1.10 Régénérer `src/operations/_registry.ts` après tous les renommages
-  - Vérifier: `bun run tsc --noEmit` — 0 erreurs
-  - Vérifier: `bun run test` — tous les tests passent
-
----
-
-### 2. Opérations listées dans l'inventaire design.md mais absentes du code
-
-#### 2.1 Nouvelles opérations `users/`
-
-- [ ] 2.1 Créer `src/operations/users/register.operation.ts` (mutate, public) — R1
-  - Input Zod: `{ email, password, displayName?, consent: { privacy, dataProcessing, whatsappComms } }`
-  - Valider password: 12+ chars, lettre + chiffre + spécial (R1.4)
-  - Vérifier email unique → message générique si existe (R1.2: ne pas révéler l'existence)
-  - Créer `AuraUser` avec `whatsappLinked = false`, générer code liaison 8 alphanum sur `AuraUser.linkCode` (R1.3)
-  - Créer `Profile` avec alias généré
-  - Ouvrir session JWT via `createSession(ctx, user.id)` (R1.1)
-  - Vérifier: POST /aura/users.register avec email nouveau → 200 + session + linkCode
-  - Vérifier: POST /aura/users.register avec email existant → erreur générique
-  - Vérifier: `linkCode` = 8 caractères alphanumériques
-  - _Requirements: R1, R1.1, R1.2, R1.3, R1.4, R1.5_
-
-- [ ] 2.2 Créer `src/operations/users/verify-email.operation.ts` (mutate, public) — R1
-  - Input Zod: `{ token: z.string() }`
-  - _Requirements: R1_
-
-- [ ] 2.3 Créer `src/operations/users/set-region.operation.ts` (mutate, auth) — R40.1
-  - Input Zod: `{ region: z.string() }`
-  - _Requirements: R40.1_
-
-- [ ] 2.4 Créer `src/operations/users/data-export.action.ts` (action, auth) — R36.5
-  - Export complet du sous-graphe utilisateur: entités + relations + embeddings + profil + services
-  - Format JSON conforme RGPD
-  - _Requirements: R36.5_
-
-- [ ] 2.5 Créer `src/operations/users/data-delete.action.ts` (action, auth) — R36.4
-  - Supprime toutes les données utilisateur (profil, services, conversations, messages, matchs)
-  - _Requirements: R36.4_
-
-#### 2.2 Nouvelles opérations `conversations/`
-
-- [ ] 2.6 Créer `src/operations/conversations/close.operation.ts` (mutate, auth) — R8.4
-  - Passe `conversation.status = CLOSED`
-  - Vérifie que l'utilisateur est participant
-  - _Requirements: R8.4_
-
-#### 2.3 Nouvelles opérations `matching/`
-
-- [ ] 2.7 Créer `src/operations/matching/orchestrator.action.ts` (action, internal)
-  - Invoque l'Orchestrateur_Matching LangGraph
-  - Input: requesterId, contraintes (skills, location, industry, need, budget)
-  - Appelle le graphe LangGraph séparé qui exécute traverse → embedding → RRF → diversity
-  - _Design: § Couche 3, design.md lignes 363-417 (Orchestrateur_Matching)_
-
-- [ ] 2.8 Créer `src/operations/matching/orchestrator-cache.db-read.ts`
-  - Vue materialisée: `(user_id, query_hash, ttl)`
-  - Cache Redis TTL 60s (design.md ligne 410)
-  - _Design: § Couche 3, design.md ligne 410 "CacheStore ─ TTL 60s"_
-
-#### 2.4 Nouvelles opérations `disputes/`
-
-- [ ] 2.9 Créer `src/operations/disputes/list-pending.operation.ts` (query, admin) — R10.2
-  - Filtrable par statut (open/under_review/resolved)
-  - _Requirements: R10.2_
-
-- [ ] 2.10 Créer `src/operations/disputes/snapshot-builder.action.ts` (action, internal) — R9.1
-  - Capture snapshot complet des messages de la conversation au moment du signalement
-  - Stocke via `ctx.storage.store()` (design.md § File storage: snapshots de Disputes)
-  - _Requirements: R9.1_
-
-#### 2.5 Nouvelles opérations `admin/`
-
-- [ ] 2.11 Créer `src/operations/admin/metrics-business.operation.ts` (query, admin) — R10.4
-
-  | Métrique | Source |
-  |---|---|
-  | Users actifs (30j) | `AuraUser` où `createdAt > now() - 30j` |
-  | Match requests créées | `Match` count |
-  | Taux d'acceptation | `Match` où status = ACCEPTED / total (hors PENDING) |
-  | Conversations ouvertes | `Conversation` count |
-  | Disputes ouvertes/résolues | `Dispute` group by status |
-
-  - _Requirements: R10.4_
-
-- [ ] 2.12 Créer `src/operations/admin/metrics-ai.operation.ts` (query, admin) — R10.5, R42
-
-  | Métrique | Source |
-  |---|---|
-  | Tokens consommés par modèle | `AuraAIUsage` (ou `llm_calls`) group by model |
-  | Latence moyenne Bot_WhatsApp | `llm_calls.phase = "bot"` avg(latencyMs) |
-  | Latence moyenne Orchestrateur | `llm_calls.phase = "orchestrator"` avg(latencyMs) |
-  | Taux matchs notés >= 4/5 | `Rating` où score >= 4 / total |
-
-  - _Requirements: R10.5, R42_
-
-#### 2.6 Nouvelles opérations `payments/`
-
-- [ ] 2.13 Créer `src/operations/payments/initiate-badge.action.ts` (action, auth) — R31.1
-  - 10 000 FCFA/an
-  - Déclenche workflow vérification identité (R32)
-  - _Requirements: R31.1_
-
-- [ ] 2.14 Créer `src/operations/payments/initiate-boost.action.ts` (action, auth) — R31.2
-  - 1 000 FCFA / 7 jours
-  - Persiste `BoostsSlot` avec `startsAt = now()`, `endsAt = now() + 7j` (R31.2)
-  - _Requirements: R31.2_
-
-- [ ] 2.15 Créer `src/operations/payments/initiate-pro.action.ts` (action, auth) — R31.3
-  - 3 000 FCFA/mois
-  - Crée `Subscription` avec `plan = PRO`, `endsAt = now() + 30j`
-  - Programme renouvellement via `ctx.scheduler.runAt(endsAt - 7j)` (R34.1)
-  - _Requirements: R31.3_
-
-- [ ] 2.16 Créer `src/operations/payments/refund.action.ts` (action, admin) — R32.5, R33.5
-  - Rembourse via `PaymentProvider.refundPayment()`
-  - _Requirements: R32.5, R33.5_
-
-#### 2.7 Nouvelles opérations `subscriptions/`
-
-- [ ] 2.17 Créer `src/operations/subscriptions/status.operation.ts` (query, auth)
-  - Retourne le statut de l'abonnement actif de l'utilisateur connecté
-
-- [ ] 2.18 Créer `src/operations/subscriptions/cancel.operation.ts` (mutate, auth) — R34.4
-  - Passe `subscription.status = CANCELLED`
-  - _Requirements: R34.4_
-
-- [ ] 2.19 Créer `src/operations/subscriptions/renew-charge.cron.ts` (cron) — R34.2
-  - `defineCronFn("subscriptions.renew-charge")` — quotidien
-  - Trouve les subscriptions expirant dans 7j, envoie notification rappel, tente renouvellement
-  - _Requirements: R34.2_
-
-#### 2.8 Nouvelles notifications
-
-- [ ] 2.20 Créer `src/operations/notifications/warning.notification.ts` — R9.4
-  - Payload: `{ phoneE164, warningCount, reason }`
-  - _Requirements: R9.4_
-
-- [ ] 2.21 Créer `src/operations/notifications/suspension.notification.ts` — R9.5
-  - Payload: `{ phoneE164, reason }`
-  - _Requirements: R9.5_
-
-#### 2.9 Nouveau middleware
-
-- [ ] 2.22 Créer `src/operations/_middleware/with-region-filter.middleware.ts`
-  - Injecte `ctx.region` à partir du profil utilisateur
-  - _Requirements: R40.1_
-
----
-
-### 3. Knowledge Graph IA (R17-R23)
-
-- [ ] 3.1 Ajouter les modèles Prisma dans `prisma/schema.prisma` (design.md § Couche 4, lignes 430-465)
-
-  | Table | Champs | Index |
-  |---|---|---|
-  | `entities` | id, user_id, type (User\|Service\|Skill\|Location\|Industry\|Need), value, confidence, status, source (conversation\|dashboard), embedding_id, created_at | (user_id, type), (type, value), GIN(metadata) |
-  | `relations` | id, source_entity_id FK→entities, target_entity_id FK→entities, predicate (PROVIDES\|REQUIRES\|LOCATED_IN\|LOOKS_FOR\|MATCHES\|CONNECTED_TO\|RATED), strength Float, source, created_at | (predicate, source_entity_id), (predicate, target_entity_id) |
-  | `graph_embeddings` | id, entity_id FK→entities, embedding vector(1536), metadata jsonb, updated_at | HNSW(embedding vector_cosine_ops), (entity_id), GIN(metadata) |
-
-  - Clés étrangères avec contraintes d'intégrité référentielle (R17.3)
-  - Exclure entités avec confidence < 0.5 du traversal (R17.5)
-
-- [ ] 3.2 Créer `src/operations/_services/knowledge-graph-service.ts`
-  - `upsertEntity(userId, type, value)` — si existe déjà même value+type pour même userId: incrémente confidence selon `1 - (1-a)(1-b)` (R18.3). Sinon: crée avec confidence initiale. Source = "dashboard" si vient d'une mutation, "conversation" si vient de l'extraction LLM (R18.5)
-  - `upsertRelation(sourceEntityId, targetEntityId, predicate, strength)` — crée relation avec FK vérifiées (R17.3), strength Float 0-1
-  - `traverse(constraints)` — CTE récursive PostgreSQL (design.md § CTE lines 1610-1686):
-    - Depth 1-3, max 10000 paths (R19.2)
-    - Poids: `produit(strength) × decay_factor^length` où decay_factor = 0.85 (R19.3)
-    - Pénaliser relations MATCHES/RATED négatives (R19.5)
-    - Top 50 candidats triés par score décroissant (R19.4)
-  - `regenerateEmbedding(entityId)` — génère embedding 1536d via LLM, persiste dans `graph_embeddings`. Retry 3x avec backoff exponentiel. Si échec: `embedding_stale = true` + notification Admin (R22.5)
-  - `serializeEntity(entity)` / `parseEntity(json)` — round-trip: `parseEntity(serializeEntity(e)) === e` (R23.1-2)
-  - `serializeRelation(relation)` / `parseRelation(json)` — round-trip (R23.3)
-  - _Requirements: R17, R18, R19, R22, R23_
-
-- [ ] 3.3 Créer les opérations `src/operations/graph/` (design.md lignes 695-701)
-
-  | Opération | Fichier | Type | R |
-  |---|---|---|---|
-  | graph.upsert-entity | `graph/upsert-entity.operation.ts` | mutate, internal | R17, R18 |
-  | graph.upsert-relation | `graph/upsert-relation.operation.ts` | mutate, internal | R17.2 |
-  | graph.regenerate-embedding | `graph/regenerate-embedding.action.ts` | action, internal | R22.2 |
-  | graph.traverse | `graph/traverse.db-read.ts` | db-read | R19 |
-  | graph.search-vector | `graph/search-vector.action.ts` | action, internal | R20.1-3 |
-  | graph.refresh-views | `graph/refresh-views.cron.ts` | cron | — |
-
-  - `graph.search-vector.action.ts`: embedding 1536d de la requête, cosine via `defineVectorIndex`, filtres region + exclusion demandeur + déjà matchés < 30j + suspendus (R20.2), top 50 (R20.3)
-
-- [ ] 3.4 Implémenter RRF fusion + Diversity Mix dans MatchingService (design.md § Hybrid Scoring, lignes 400-409)
-  - RRF: `rrf(rankA[], rankB[], k=60)` → score normalisé 0-1 avec détail des deux scores composants (R20.4-5)
-  - Diversity Mix: 60% quartile supérieur, 30% quartile médian, 10% wildcard, max 5 profils (R21.1)
-  - Boost actif: réserve position top 3 (R21.3)
-  - Badge Vérifié: bonus ×1.10 sur score avant tri (R21.4)
-  - Exclusions: soi-même, déjà matché < 30j, suspendu, bloqué (R21.2)
-  - Garantie: pas de doublon dans les résultats (R21.5)
-
-- [ ] 3.5 Ajouter `ctx.scheduler.runAfter` dans les services existants
-  - `ProfileService.updateProfile`: après modification bio/skills/location → `ctx.scheduler.runAfter(60000, "graph.regenerate-embedding", { userId })` (R22.1)
-  - `ServiceService.create/update/delete`: après chaque mutation → `ctx.scheduler.runAfter(0, "graph.upsert-entity", { userId, serviceId, action })` (R22.1)
-  - _Requirements: R22.1_
-
----
-
-### 4. Admin & Modération (R9-R10)
-
-- [ ] 4.1 Créer `src/operations/_services/dispute-service.ts`
-  - `report(conversationId, reporterId, reason)` — crée Dispute avec snapshot messages (R9.1), publie événement room `admin:disputes` (R9.2), envoie Notification_WhatsApp accusé de réception au reporter
-  - `resolve(disputeId, decision)` — parmi `dismiss | warn_reporter | warn_reported | warn_both | suspend_reported | suspend_both` (R9.3)
-    - Si warn: incrémente `profiles.warning_count` + Notification_WhatsApp explicative (R9.4)
-    - Si `warning_count >= 3`: `profiles.status = SUSPENDED` automatiquement + Notification_WhatsApp (R9.5)
-  - _Requirements: R9_
-
-- [ ] 4.2 Créer `src/operations/_middleware/with-admin.middleware.ts`
-  - Vérifie `ctx.user.role === "admin"`, throw `AuraError("FORBIDDEN")` sinon (R10.1)
-  - _Requirements: R10.1_
-
----
-
-### 5. Paiements & Monétisation (R28-R34)
-
-- [ ] 5.1 Créer `src/workflows/verify-identity.workflow.ts` (defineWorkflow)
-  - Étapes: `upload_documents → review → activate_or_reject` (R32.1)
-  - Upload selfie + CNI via `ctx.storage.store()` avec accès restreint rôle Admin (R32.2)
-  - Admin_Console affiche file d'attente `pending_review` (R32.3)
-  - Admin approve: `profiles.is_verified = true` + Notification_WhatsApp (R32.4)
-  - Admin reject: `PaymentProvider.refundPayment()` + Notification_WhatsApp avec motif (R32.5)
-  - Traçabilité complète: étapes, décideur, timestamps pour audit (R32.6)
-  - _Requirements: R32_
-
-- [ ] 5.2 Créer `src/workflows/escrow-lifecycle.workflow.ts` (defineWorkflow)
-  - Déclaration mission avec `mission_amount` et `commission_rate` 5-8% (R33.1)
-  - Paiement séquestre via `PaymentProvider.initiatePayment` (R33.2)
-  - Confirmation livraison → libération `mission_amount` au prestataire, commission conservée (R33.3)
-  - Litige → gel fonds jusqu'à résolution Admin (R33.4)
-  - Admin tranche: libération totale, remboursement total ou répartition (R33.5)
-  - _Requirements: R33_
-
-- [ ] 5.3 Implémenter `src/lib/feature-flags.ts`
-  - `BUSINESS_PHASE`: `"mvp" | "freemium" | "commission"` (R30.3)
-  - MVP: bloque les écrans de paiement (R30.1), impose 20 matchs/jour max (R30.2)
-  - Freemium: active Badge/Boost/Pro (R31)
-  - _Requirements: R30_
-
-- [ ] 5.4 Créer `src/operations/_services/observability-service.ts` (Couche 7)
-  - `recordLlmCall(data)` — persiste dans `llm_calls`: model, provider, inputTokens, outputTokens, latencyMs, estimatedCost, correlationId (R42.1)
-  - `getBusinessMetrics(since)` — agrège les métriques business (même calcul que 2.11)
-  - `getAiMetrics(since)` — agrège les métriques IA (même calcul que 2.12)
-  - CorrelationId UUID v7 propagé de Webhook_WhatsApp → Graphe_Agent_User → Orchestrateur → Notification (R45.2)
-  - _Requirements: R42, R45.2_
-
-- [ ] 5.5 Créer `src/lib/payments/flutterwave.ts`
-  - Implémente `PaymentProvider` pour Flutterwave (phase 3)
-  - `initiatePayment(input)`, `verifyWebhookSignature(headers, body)`, `getPaymentStatus(transId)`, `refundPayment(transId)` (R28.1)
-  - Sélectionné par région: CI/SN/BF → Provider_Flutterwave (R28.3)
-  - _Requirements: R28_
-
----
-
-### 6. Infrastructure & Déploiement (R41-R50)
-
-- [ ] 6.1 Property-based tests (fast-check) dans `tests/properties/`
-  - `tests/properties/rrf.test.ts`: RRF(k=60) avec classements identiques, inversés, partiellement overlappés — vérifie score normalisé 0-1
-  - `tests/properties/traversal.test.ts`: round-trip CTE avec graphe cyclique, depth 1-3, pas de récursion infinie
-  - `tests/properties/serialize.test.ts`: `parseEntity(serializeEntity(e))` pour tous les types d'entités (R23.2)
-  - `tests/properties/diversity.test.ts`: Diversity Mix produit max 5 profils, pas de doublon (R21.5)
-  - _Requirements: R47_
-
-- [ ] 6.2 Créer `docker-compose.yml`
-  - Services: aura-app, postgres (pgvector), redis, evolution-api, grafana (optionnel)
-  - _Requirements: R45_
-
-- [ ] 6.3 Ajouter endpoint `/metrics` sur broadcast server
-  - Métriques Prometheus:
-    - `aura_whatsapp_messages_total{direction,status}`
-    - `aura_bot_latency_seconds{phase}`
-    - `aura_match_latency_seconds{node}`
-    - `aura_llm_tokens_total{model,node}`
-    - `aura_llm_cost_usd_total{model}`
-    - `aura_match_quality_ratio` (rolling 30j)
-    - `aura_outbox_queue_depth`
-  - _Design: § Couche 7, design.md lignes 572-579_
-  - _Requirements: R45.3_
-
-- [ ] 6.4 Créer `src/aura/server/middleware/idempotency.ts`
-  - Middleware Hono: vérifie header `Idempotency-Key` sur les mutations POST
-  - Si déjà traité: retourne le résultat précédent sans réexécuter
-  - _Requirements: R49_
-
-- [ ] 6.5 Créer `src/lib/whatsapp/business-gateway.ts`
-  - Implémente `WhatsAppGateway` via Meta WhatsApp Business API Graph v22
-  - Bascule automatique via `BUSINESS_PHASE` (design.md § Migration Baileys → WAB, lignes 295-305)
-  - MVP: BaileysGateway. Freemium: WhatsAppBusinessGateway. Dual-write pendant transition.
-  - _Requirements: R37_
-
----
-
-## Task Dependency Graph
-
-```json
-{
-  "waves": [
-    {
-      "id": 0,
-      "name": "Foundations",
-      "tasks": ["0.1","0.2","0.3","0.4","0.5","0.6","0.7","0.8","0.9","0.10","0.11","0.12","0.13"]
-    },
-    {
-      "id": 1,
-      "name": "Rename to design.md inventory",
-      "tasks": ["1.1","1.2","1.3","1.4","1.5","1.6","1.7","1.8","1.9","1.10"]
-    },
-    {
-      "id": 2,
-      "name": "Missing operations (users, conversations)",
-      "tasks": ["2.1","2.2","2.3","2.4","2.5","2.6"]
-    },
-    {
-      "id": 3,
-      "name": "Missing operations (matching, disputes, admin, payments)",
-      "tasks": ["2.7","2.8","2.9","2.10","2.11","2.12","2.13","2.14","2.15","2.16","2.17","2.18","2.19","2.20","2.21","2.22"]
-    },
-    {
-      "id": 4,
-      "name": "Knowledge Graph",
-      "tasks": ["3.1","3.2","3.3","3.4","3.5"]
-    },
-    {
-      "id": 5,
-      "name": "Admin & Moderation",
-      "tasks": ["4.1","4.2"]
-    },
-    {
-      "id": 6,
-      "name": "Payments & Monetization",
-      "tasks": ["5.1","5.2","5.3","5.4","5.5"]
-    },
-    {
-      "id": 7,
-      "name": "Infrastructure & Deployment",
-      "tasks": ["6.1","6.2","6.3","6.4","6.5"]
-    }
-  ]
-}
+## Conventions UI (design tokens homepage)
+
+```tsx
+// Design tokens — à reproduire dans tous les composants
+// Couleurs primaires
+const primary = "from-blue-500 to-blue-600";
+const primaryBg = "bg-gradient-to-b from-blue-500 to-blue-600";
+const cardBg = "bg-white/62 backdrop-blur border border-white shadow-card";
+const navBg = "bg-white/84 backdrop-blur-2xl border border-white/90";
+const textPrimary = "text-slate-950";
+const textSecondary = "text-slate-500";
+const textTertiary = "text-slate-400";
+
+// Layout
+const container = "mx-auto max-w-4xl px-4";
+const section = "py-14 sm:py-20";
 ```
 
-**Notes:**
-- Wave 0 (Fondations) est terminée et doit être stable avant wave 1 (renommage)
-- Wave 1 (renommage) doit précéder wave 2-3 (création d'ops) pour que les chemins soient corrects
-- Wave 4 (Knowledge Graph) dépend de wave 3 (matching/orchestrator)
-- Waves 5-7 peuvent commencer dès que wave 1 est terminée
-- Toutes les waves doivent être vérifiées par `bun run tsc --noEmit` et `bun run test`
+---
+
+## Wave 8 — UI: Auth et Landing (R1, R2)
+
+Prérequis : Wave 0-7 (backend complet, cf. `tasks.backup`)
+
+### 8.1 Composant `AuthLayout` — Gabarit pour pages login/signup
+- Reprend le fond blur circles + gradient de la homepage
+- Props : `children`, `title`, `subtitle`
+- Fichier : `src/components/auth/auth-layout.tsx`
+
+### 8.2 Composant `SignUpForm` — Formulaire d'inscription (R1.1-5)
+- Champs : email, password (12+ chars, lettre+chiffre+spécial), displayName
+- Consent checkbox (privacy, dataProcessing, whatsappComms)
+- Validation Zod côté client avant envoi
+- Appelle `api.users.register`
+- Afficher `linkCode` après succès (R1.3)
+- Fichier : `src/components/auth/sign-up-form.tsx`
+
+### 8.3 Composant `SignInForm` — Formulaire de connexion (R2)
+- Champs : email/phone, password
+- Appelle `api.auth.login` ou `api.auth['start-phone-otp']`
+- Fichier : `src/components/auth/sign-in-form.tsx`
+
+### 8.4 Page `/sign-up` — Wrapper route avec AuthLayout
+- Délègue à `SignUpForm`
+- Lien vers sign-in
+
+### 8.5 Page `/sign-in` — Wrapper route avec AuthLayout
+- Délègue à `SignInForm`
+- Lien vers sign-up
+
+*Design : même style que la homepage (fond blur, boutons gradient bleus, backdrop-blur cards)*
+
+---
+
+## Wave 9 — UI: Dashboard Layout (R3, R4, R8)
+
+Prérequis : Wave 8
+
+### 9.1 `AppSidebar` — Barre latérale navigation
+- Icônes + labels : Accueil, Services (providerOnly), Matchs, Conversations, Abonnement, Paramètres
+- Avatar utilisateur + nom en bas
+- Style : fixed left, bg-white/84 backdrop-blur, border-r
+- Fichier : `src/components/app/app-sidebar.tsx`
+
+### 9.2 `AppLayout` refactor — Layout principal `/app`
+- Sidebar à gauche + contenu à droite
+- Mobile : bottom nav bar au lieu de sidebar
+- Fichier : `src/components/app/app-layout.tsx`
+
+### 9.3 `ProfileCard` — Carte profil utilisateur (R4)
+- Photo, displayName, bio, location, skills, type (standard/prestataire)
+- Bouton modifier → formulaire inline
+- Appelle `api.profiles.upsert`
+- Fichier : `src/components/profiles/profile-card.tsx`
+
+### 9.4 `ProfileForm` — Formulaire édition profil
+- Champs : displayName (max 80), bio (max 1000), locationLabel, skills
+- Upload photo via `api.profiles['upload-photo']` (format png/jpg/webp, max 5Mo)
+- Fichier : `src/components/profiles/profile-form.tsx`
+
+### 9.5 `SetTypeCard` — Choix type profil (R3)
+- Cartes User_Standard vs Prestataire avec icônes
+- Appelle `api.profiles['set-type']`
+- Fichier : `src/components/profiles/set-type-card.tsx`
+
+### 9.6 Page `/app` — Dashboard accueil
+- ProfileCard + SetTypeCard si pas encore défini
+- Résumé activité récente (matchs, messages)
+- Style cards bg-white/62 backdrop-blur border
+
+---
+
+## Wave 10 — UI: Services (R5)
+
+Prérequis : Wave 9
+
+### 10.1 `ServiceCard` — Carte service
+- Titre, description (tronquée), prix FCFA, disponibilité (badge), zone
+- Boutons : modifier, désactiver, supprimer
+- Fichier : `src/components/services/service-card.tsx`
+
+### 10.2 `ServiceForm` — Formulaire création/édition service
+- Champs : title (max 120), description (max 2000), priceXaf (entier positif),
+  availability (select), zone
+- Appelle `api.services.create` ou `api.services.update`
+- Limite 50 services actifs sans Pro (R5.4)
+- Fichier : `src/components/services/service-form.tsx`
+
+### 10.3 `ServiceList` — Liste des services
+- Grille de ServiceCard
+- Bouton "Nouveau service" → ouvre ServiceForm modal
+- Fichier : `src/components/services/service-list.tsx`
+
+### 10.4 Page `/app/services` — Gestion des services
+- ServiceList pour prestataires
+- Message "Passer en mode Prestataire" pour standards (R3.3)
+- Style cards bg-white/62 backdrop-blur
+
+---
+
+## Wave 11 — UI: Matching (R6, R24, R25)
+
+Prérequis : Wave 9
+
+### 11.1 `MatchCard` — Carte match request
+- Alias du profil cible (R25.1 : pas de vrai nom en pending)
+- Statut (pending/accepted/refused/expired) + badge coloré
+- Boutons : accepter (R6.4), refuser (R24.3), annuler (R6.3)
+- Fichier : `src/components/matching/match-card.tsx`
+
+### 11.2 `MatchList` — Liste matchs inbox/sent
+- Tabs : Reçus / Envoyés
+- Appelle `api.matching['list-mine']`
+- Filtre par `isIncoming`
+- Fichier : `src/components/matching/match-list.tsx`
+
+### 11.3 Page `/app/matches` — Mes matchs
+- MatchList complète
+- Badge non lu pour nouvelles requests (R6.2)
+
+---
+
+## Wave 12 — UI: Conversations et Chat (R8, R26, R27)
+
+Prérequis : Wave 11
+
+### 12.1 `ConversationList` — Liste conversations (R8.1)
+- Tri par dernier message
+- Avatar + nom + dernier message tronqué + timestamp
+- Badge non lu
+- Appelle `api.conversations['list-mine']`
+- Fichier : `src/components/chat/conversation-list.tsx`
+
+### 12.2 `ChatMessage` — Bulle de message
+- Alignée à droite pour l'envoyeur, à gauche pour le receveur
+- Texte + timestamp + status lu/non lu
+- Fichier : `src/components/chat/chat-message.tsx`
+
+### 12.3 `ChatInput` — Zone de saisie
+- Textarea auto-resize (max 4000 chars — R27.2)
+- Bouton envoi
+- Fichier : `src/components/chat/chat-input.tsx`
+
+### 12.4 `ChatConversation` — Panneau conversation
+- Liste scrollable de ChatMessage (historique paginé 20 msg — R8.2)
+- ChatInput en bas
+- Rejoint room WS `conversation:{id}` via `useAuraRoom`
+- Fichier : `src/components/chat/chat-conversation.tsx`
+
+### 12.5 `ChatLayout` — Layout split conversations/chat
+- ConversationList à gauche, ChatConversation à droite
+- Mobile : écran split avec navigation
+- Fichier : `src/components/chat/chat-layout.tsx`
+
+### 12.6 Page `/app/chat` — Conversations
+- ChatLayout complet
+- WebSocket temps réel pour nouveaux messages
+
+---
+
+## Wave 13 — UI: Ratings et Disputes (R7, R9, R10)
+
+Prérequis : Wave 12
+
+### 13.1 `RatingForm` — Formulaire notation (R7.1)
+- Stars 1-5 + comment optionnel (max 500)
+- Appelle `api.ratings.submit`
+- Fichier : `src/components/ratings/rating-form.tsx`
+
+### 13.2 `RatingStats` — Statistiques notes (R7.2)
+- Moyenne + nombre d'avis
+- Appelle `api.ratings['stats-by-user']`
+- Fichier : `src/components/ratings/rating-stats.tsx`
+
+### 13.3 `DisputeForm` — Formulaire signalement (R9.1)
+- Select motif + description
+- Appelle `api.disputes.report`
+- Fichier : `src/components/disputes/dispute-form.tsx`
+
+### 13.4 `DisputeList` (admin) — Liste litiges (R10.2)
+- Tableau filtrable par statut (open/under_review/resolved)
+- Appelle `api.disputes['list-pending']`
+- Fichier : `src/components/admin/dispute-list.tsx`
+
+### 13.5 `DisputeResolve` (admin) — Résolution litige (R9.3-5)
+- Décision : dismiss/warn/suspend
+- Note interne optionnelle
+- Appelle `api.disputes.resolve`
+- Fichier : `src/components/admin/dispute-resolve.tsx`
+
+### 13.6 `MetricsDashboard` (admin) — Métriques (R10.4-5)
+- Cartes : users actifs, matchs créés, taux acceptation, conversations, disputes
+- Graphiques tokens IA par modèle (Recharts)
+- Appelle `api.admin['metrics-business']` et `api.admin['metrics-ai']`
+- Fichier : `src/components/admin/metrics-dashboard.tsx`
+
+### 13.7 `UserManagement` (admin) — Gestion utilisateurs (R9.6, R10.3)
+- Tableau suspendus + bouton lever suspension
+- Appelle `api.admin.users.suspend` / `api.admin.users.reactivate`
+- Fichier : `src/components/admin/user-management.tsx`
+
+### 13.8 Page `/admin` — Console admin
+- Tabs : Litiges, Métriques, Utilisateurs suspendus
+
+---
+
+## Wave 14 — UI: Paiements et Abonnements (R28-R34)
+
+Prérequis : Wave 13
+
+### 14.1 `PricingCards` — Cartes tarifs (R31.1-3)
+- Badge Vérifié : 10 000 FCFA/an
+- Boost : 1 000 FCFA / 7 jours
+- Pro : 3 000 FCFA/mois
+- Boutons acheter → appellent `api.payments['initiate-badge/boost/pro']`
+- Désactivé si `BUSINESS_PHASE = "mvp"` (R30.1)
+- Fichier : `src/components/payments/pricing-cards.tsx`
+
+### 14.2 `SubscriptionStatus` — Statut abonnement
+- Plan actuel + date fin + bouton annuler
+- Appelle `api.subscriptions.status`
+- Fichier : `src/components/payments/subscription-status.tsx`
+
+### 14.3 `PaymentHistory` — Historique paiements
+- Liste : date, type, montant, statut
+- Appelle `api.payments['list-history']`
+- Fichier : `src/components/payments/payment-history.tsx`
+
+### 14.4 `IdentityVerificationFlow` — Flow vérification identité (R32)
+- Upload selfie + CNI via `ctx.storage`
+- File d'attente pending_review pour admin
+- Notification WhatsApp à l'activation/rejet
+- Fichier : `src/components/payments/identity-verification.tsx`
+
+### 14.5 Page `/app/billing` — Abonnement et paiements
+- PricingCards si pas d'abonnement actif
+- SubscriptionStatus + PaymentHistory si abonné
+- IdentityVerificationFlow pour badge
+
+---
+
+## Wave 15 — UI: Settings et Onboarding (R38-R40)
+
+Prérequis : Wave 14
+
+### 15.1 `SettingsForm` — Paramètres compte
+- Language (FR/EN) → `api.users['set-language']`
+- Region → `api.users['set-region']`
+- Consentements → `api.users['consent-record']`
+- Export données → `api.users['data-export']`
+- Supprimer compte → `api.users['data-delete']`
+- Fichier : `src/components/settings/settings-form.tsx`
+
+### 15.2 `OnboardingFlow` — Flow onboarding post-inscription
+- Étape 1 : Mot de passe (si registration sans password)
+- Étape 2 : Profil (displayName, bio, location)
+- Étape 3 : Type (standard/prestataire)
+- Étape 4 : Consentements
+- Fichier : `src/components/onboarding/onboarding-flow.tsx`
+
+### 15.3 Page `/settings` — Paramètres
+- SettingsForm complet
+
+---
+
+## Wave 16 — Tests UI et Intégration (R47)
+
+Prérequis : Waves 8-15
+
+### 16.1 Tests composants (Vitest + Testing Library)
+- Chaque composant a son test unitaire
+- Mock AuraContext via `as unknown as AuraContext`
+- Props + états (loading, empty, error, data)
+
+### 16.2 Tests d'intégration route → opération
+- Tester le flux complet : clic → API → render
+- Utiliser `useAuraQuery`/`useAuraMutation` mockés
+
+### 16.3 Tests responsivité
+- Layout desktop vs mobile
+- Sidebar → bottom nav à `< 768px`
+
+---
+
+## Dépendances
+
+```
+Wave 0-7 (backend, tasks.backup)
+  │
+  ▼
+Wave 8  (Auth UI)
+  │
+  ▼
+Wave 9  (Dashboard Layout)
+  │
+  ├──────────┬──────────┐
+  ▼          ▼          ▼
+Wave 10    Wave 11    Wave 12
+(Services) (Matching) (Chat)
+  │          │          │
+  └──────────┼──────────┘
+             ▼
+        Wave 13 (Ratings + Admin)
+             │
+             ▼
+        Wave 14 (Paiements)
+             │
+             ▼
+        Wave 15 (Settings + Onboarding)
+             │
+             ▼
+        Wave 16 (Tests)
+```
+
+## Notes
+
+- Chaque composion = son propre fichier, ses propres props typées
+- Style reproduit les design tokens de la homepage (bordures blanches, blur, shadows)
+- Pas de dépendances UI externes (shadcn désactivé) — utiliser Lucide icons
+- Toute mutation utilise `.catch(() => {})` pour les fire-and-forget notifications
+- Tout composant UI doit exister dans `src/components/<feature>/<name>.tsx`
+- Toute page route doit être minimal (wrapper → composant)
+- Vérifier chaque wave avec `bun run tsc --noEmit` et `bun run test`

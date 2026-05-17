@@ -2,7 +2,7 @@ import { defineOperationFn } from "@/aura/server/operation";
 import { z } from "zod";
 import { AuraError } from "@/aura/core/errors";
 
-export default defineOperationFn("chat.list-messages")
+export default defineOperationFn("conversations.list-messages")
   .query()
   .input(z.object({ conversationId: z.string(), cursor: z.string().nullish(), numItems: z.number().int().max(50).default(20) }))
   .entities(["ChatMessage"])
@@ -17,6 +17,6 @@ export default defineOperationFn("chat.list-messages")
       take: input.numItems,
       orderBy: "createdAt",
       direction: "desc",
-      operationHash: "chat.list-messages",
+      operationHash: "conversations.list-messages",
     });
   });

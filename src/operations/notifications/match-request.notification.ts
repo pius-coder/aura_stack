@@ -10,7 +10,7 @@ const PhonePayload = z.object({
 
 export default defineNotificationFn("match-request")
   .payload(PhonePayload)
-  .handler(async ({ ctx, payload }) => {
+  .handler(async ({ payload }) => {
     const gateway = whatsAppGateway();
     await gateway.sendText(payload.phoneE164, t("match.new_request", payload.language), `notif-match-req-${Date.now()}`);
   });

@@ -2,7 +2,7 @@ import { defineOperationFn } from "@/aura/server/operation";
 import { z } from "zod";
 import { MatchService } from "@/operations/_services/match-service";
 
-export default defineOperationFn("matches.accept")
+export default defineOperationFn("matching.accept-request")
   .mutate()
   .input(z.object({ matchId: z.string() }))
   .entities(["Match", "Conversation"])

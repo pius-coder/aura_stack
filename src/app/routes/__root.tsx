@@ -17,11 +17,11 @@ export const Route = createRootRoute({
 
 function RootLayout() {
   return (
-    <html lang="fr" className="dark">
+    <html lang="fr">
       <head>
         <HeadContent />
       </head>
-      <body className="min-h-screen bg-zinc-950 font-sans text-white antialiased">
+      <body className="min-h-screen bg-background font-sans text-foreground antialiased">
         <AuraClientProvider>
           <Outlet />
           <AuraBumpToaster />

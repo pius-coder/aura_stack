@@ -1,4 +1,4 @@
-import { describe, it, expect, vi } from "vitest";
+import { describe, it, expect } from "vitest";
 import { ProfileService } from "./profile-service";
 import { AuraService } from "@/aura/server/service";
 import type { AuraContext } from "@/aura/server/context";
@@ -37,8 +37,8 @@ describe("ProfileService", () => {
   describe("updateProfile", () => {
     it("updates profile fields", async () => {
       const ctx = {
-        db: { profile: { update: async () => ({ id: "prof_1", displayName: "New Name" }) } },
-        scheduler: { runAfter: vi.fn() },
+        db: { profile: { update: async () => ({ id: "prof_1", displayName: "New Name" }) }, knowledgeEntity: { findMany: async () => [] } },
+        scheduler: { runAfter: async () => "job_1" },
       } as unknown as AuraContext;
       const svc = new ProfileService(ctx);
       const result = await svc.updateProfile("user_1", { displayName: "New Name" });
@@ -103,14 +103,20 @@ describe("ProfileService", () => {
     });
   });
 
-  describe("canUploadPhoto", () => {
-    it("accepts valid image types", async () => {
-      const ctx = {} as AuraContext;
+  describe("uploadPhoto", () => {
+    it("rejects invalid file type", async () => {
+      const ctx = {} as unknown as AuraContext;
       const svc = new ProfileService(ctx);
-      expect(await svc.canUploadPhoto("image/png", 1024)).toBe(true);
-      expect(await svc.canUploadPhoto("image/jpeg", 1024)).toBe(true);
-      expect(await svc.canUploadPhoto("image/gif", 1024)).toBe(false);
-      expect(await svc.canUploadPhoto("image/png", 6 * 1024 * 1024)).toBe(false);
+      const file = new File(["data"], "test.gif", { type: "image/gif" });
+      await expect(svc.uploadPhoto("user_1", file)).rejects.toThrow("Format invalide");
+    });
+
+    it("rejects oversized file", async () => {
+      const ctx = {} as unknown as AuraContext;
+      const svc = new ProfileService(ctx);
+      const blob = new Blob(["x".repeat(6 * 1024 * 1024)]);
+      const file = new File([blob], "test.png", { type: "image/png" });
+      await expect(svc.uploadPhoto("user_1", file)).rejects.toThrow("5 Mo");
     });
   });
 });

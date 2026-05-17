@@ -2,7 +2,7 @@ import { defineOperationFn } from "@/aura/server/operation";
 import { z } from "zod";
 import { AuraError } from "@/aura/core/errors";
 
-export default defineOperationFn("ratings.create")
+export default defineOperationFn("ratings.submit")
   .mutate()
   .input(z.object({ conversationId: z.string(), score: z.number().int().min(1).max(5), comment: z.string().max(500).optional() }))
   .entities(["Rating", "Profile"])

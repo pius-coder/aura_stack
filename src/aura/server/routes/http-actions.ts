@@ -21,8 +21,21 @@ export function auraHttpActionsRouter(): Hono {
     const method = c.req.method.toUpperCase();
     const path = "/" + (c.req.path.replace(/^\//, ""));
 
-    const action = listHttpActions().find(
-      (def: HttpActionDefinition) => def.method === method && def.path === path,
+    // Hono's app.route() does NOT strip the mount prefix from c.req.path.
+    // Example: mounted at /aura-http, request to /aura-http/webhooks/whatsapp
+    // gives c.req.path = "/aura-http/webhooks/whatsapp".
+    // Strip known mount prefixes to match against registered paths.
+    const knownPrefixes = ["/aura-http"];
+    let matchPath = path;
+    for (const prefix of knownPrefixes) {
+      if (matchPath.startsWith(prefix + "/") || matchPath === prefix) {
+        matchPath = matchPath.slice(prefix.length) || "/";
+        break;
+      }
+    }
+    const actions = listHttpActions();
+    const action = actions.find(
+      (def: HttpActionDefinition) => def.method === method && def.path === matchPath,
     );
     if (!action) {
       return c.json({ ok: false, error: { code: "NOT_FOUND", message: "Unknown HTTP action" } }, 404);
